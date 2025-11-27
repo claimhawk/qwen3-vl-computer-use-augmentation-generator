@@ -18,7 +18,7 @@ from pathlib import Path
 from typing import Any
 
 from cudag.core.coords import normalize_coord
-from cudag.core.task import BaseTask, TaskContext, TaskSample
+from cudag.core.task import BaseTask, EvalCase, TaskContext, TaskSample
 from cudag.prompts.system import get_system_prompt
 from cudag.prompts.tools import format_tool_call
 
@@ -246,3 +246,87 @@ class DatasetBuilder:
         }
         with open(output_dir / "config.json", "w") as f:
             json.dump(config_data, f, indent=2)
+
+    def build_evals(self) -> Path:
+        """Generate evaluation cases.
+
+        Returns:
+            Path to the output directory
+        """
+        output_dir = self.config.output_dir
+        assert output_dir is not None
+
+        # Create directories
+        output_dir.mkdir(parents=True, exist_ok=True)
+        (output_dir / "images").mkdir(exist_ok=True)
+
+        # Generate eval cases
+        eval_cases: list[dict[str, Any]] = []
+        index = 0
+
+        # Distribute eval_count across task types proportionally
+        total_tasks = sum(self.config.task_counts.values())
+        if total_tasks == 0:
+            return output_dir
+
+        for task_type, count in self.config.task_counts.items():
+            if task_type not in self.tasks:
+                continue
+
+            task = self.tasks[task_type]
+            # Proportional count based on task_counts ratio
+            task_eval_count = max(1, int(self.config.eval_count * count / total_tasks))
+
+            for _ in range(task_eval_count):
+                ctx = TaskContext(
+                    rng=self.rng,
+                    index=index,
+                    output_dir=output_dir,
+                    config=task.config,
+                    dataset_name=self.config.name_prefix,
+                )
+
+                # Generate evals (can be 1:N from one image)
+                evals = task.generate_evals(ctx)
+                for eval_case in evals:
+                    record = self._eval_to_record(eval_case)
+                    eval_cases.append(record)
+
+                index += 1
+
+        # Write evals file
+        self._write_jsonl(output_dir / "evals.jsonl", eval_cases)
+        print(f"Generated {len(eval_cases)} eval cases")
+
+        return output_dir
+
+    def _eval_to_record(self, eval_case: EvalCase) -> dict[str, Any]:
+        """Convert EvalCase to JSONL record."""
+        assert self.config.output_dir is not None
+
+        # Get image size from metadata if available, default to 1920x1080
+        image_size = eval_case.metadata.get("image_size", (1920, 1080))
+
+        # Normalize coordinates in expected_action
+        expected_action = eval_case.expected_action.copy()
+        if "arguments" in expected_action and "coordinate" in expected_action["arguments"]:
+            pixel_coords = expected_action["arguments"]["coordinate"]
+            if eval_case.pixel_coords:
+                pixel_coords = eval_case.pixel_coords
+            norm_coord = normalize_coord(tuple(pixel_coords), image_size)
+            expected_action["arguments"]["coordinate"] = list(norm_coord)
+
+        # Build relative screenshot path
+        screenshot_rel = str(eval_case.screenshot.relative_to(self.config.output_dir))
+
+        return {
+            "eval_id": eval_case.eval_id,
+            "screenshot": screenshot_rel,
+            "prompt": eval_case.prompt,
+            "expected_action": expected_action,
+            "tolerance": eval_case.tolerance,
+            "metadata": {
+                "real_coords": list(eval_case.pixel_coords) if eval_case.pixel_coords else None,
+                **eval_case.metadata,
+            },
+        }
