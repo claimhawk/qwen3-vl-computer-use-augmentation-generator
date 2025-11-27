@@ -220,19 +220,19 @@ class DatasetBuilder:
                 f.write(json.dumps(record) + "\n")
 
     def _write_splits(self, output_dir: Path, samples: list[dict[str, Any]]) -> None:
-        """Split samples and write train/test files."""
+        """Split samples and write train/val files."""
         # Shuffle for splitting
         shuffled = samples.copy()
         self.rng.shuffle(shuffled)
 
         split_idx = int(len(shuffled) * self.config.train_split)
         train = shuffled[:split_idx]
-        test = shuffled[split_idx:]
+        val = shuffled[split_idx:]
 
         self._write_jsonl(output_dir / "train.jsonl", train)
-        self._write_jsonl(output_dir / "test.jsonl", test)
+        self._write_jsonl(output_dir / "val.jsonl", val)
 
-        print(f"Split: {len(train)} train, {len(test)} test")
+        print(f"Split: {len(train)} train, {len(val)} val")
 
     def _write_config(self, output_dir: Path) -> None:
         """Write generation config for reference."""
@@ -251,59 +251,60 @@ class DatasetBuilder:
         """Generate evaluation cases.
 
         Returns:
-            Path to the output directory
+            Path to the evals directory
         """
         output_dir = self.config.output_dir
         assert output_dir is not None
 
-        # Create directories
-        output_dir.mkdir(parents=True, exist_ok=True)
-        (output_dir / "images").mkdir(exist_ok=True)
+        # Create evals directory structure (evals/images/)
+        evals_dir = output_dir / "evals"
+        evals_dir.mkdir(parents=True, exist_ok=True)
+        (evals_dir / "images").mkdir(exist_ok=True)
 
-        # Generate eval cases
+        # Generate eval cases - stop when we reach eval_count
         eval_cases: list[dict[str, Any]] = []
         index = 0
 
-        # Distribute eval_count across task types proportionally
-        total_tasks = sum(self.config.task_counts.values())
-        if total_tasks == 0:
-            return output_dir
+        # Get task types to iterate through
+        task_types = [t for t in self.config.task_counts.keys() if t in self.tasks]
+        if not task_types:
+            return evals_dir
 
-        for task_type, count in self.config.task_counts.items():
-            if task_type not in self.tasks:
-                continue
-
+        # Keep generating until we have enough evals
+        task_idx = 0
+        while len(eval_cases) < self.config.eval_count:
+            task_type = task_types[task_idx % len(task_types)]
             task = self.tasks[task_type]
-            # Proportional count based on task_counts ratio
-            task_eval_count = max(1, int(self.config.eval_count * count / total_tasks))
 
-            for _ in range(task_eval_count):
-                ctx = TaskContext(
-                    rng=self.rng,
-                    index=index,
-                    output_dir=output_dir,
-                    config=task.config,
-                    dataset_name=self.config.name_prefix,
-                )
+            # Pass evals_dir as output_dir so images save to evals/images/
+            ctx = TaskContext(
+                rng=self.rng,
+                index=index,
+                output_dir=evals_dir,
+                config=task.config,
+                dataset_name=self.config.name_prefix,
+            )
 
-                # Generate evals (can be 1:N from one image)
-                evals = task.generate_evals(ctx)
-                for eval_case in evals:
-                    record = self._eval_to_record(eval_case)
-                    eval_cases.append(record)
+            # Generate evals (can be 1:N from one image)
+            evals = task.generate_evals(ctx)
+            for eval_case in evals:
+                if len(eval_cases) >= self.config.eval_count:
+                    break
+                record = self._eval_to_record(eval_case, evals_dir)
+                eval_cases.append(record)
 
-                index += 1
+            index += 1
+            task_idx += 1
 
-        # Write evals file
-        self._write_jsonl(output_dir / "evals.jsonl", eval_cases)
+        # Write evals.json (not jsonl) to match calendar structure
+        with open(evals_dir / "evals.json", "w", encoding="utf-8") as f:
+            json.dump(eval_cases, f, indent=2)
         print(f"Generated {len(eval_cases)} eval cases")
 
-        return output_dir
+        return evals_dir
 
-    def _eval_to_record(self, eval_case: EvalCase) -> dict[str, Any]:
-        """Convert EvalCase to JSONL record."""
-        assert self.config.output_dir is not None
-
+    def _eval_to_record(self, eval_case: EvalCase, evals_dir: Path) -> dict[str, Any]:
+        """Convert EvalCase to record for evals.json."""
         # Get image size from metadata if available, default to 1920x1080
         image_size = eval_case.metadata.get("image_size", (1920, 1080))
 
@@ -316,8 +317,8 @@ class DatasetBuilder:
             norm_coord = normalize_coord(tuple(pixel_coords), image_size)
             expected_action["arguments"]["coordinate"] = list(norm_coord)
 
-        # Build relative screenshot path
-        screenshot_rel = str(eval_case.screenshot.relative_to(self.config.output_dir))
+        # Build relative screenshot path (relative to evals_dir)
+        screenshot_rel = str(eval_case.screenshot.relative_to(evals_dir))
 
         return {
             "eval_id": eval_case.eval_id,

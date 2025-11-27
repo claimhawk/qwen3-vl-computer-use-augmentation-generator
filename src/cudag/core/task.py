@@ -246,6 +246,7 @@ class BaseTask(ABC):
         ctx: TaskContext,
         extension: str = "png",
         quality: int = 95,
+        prefix: str | None = None,
     ) -> Path:
         """Save a generated image to the output directory.
 
@@ -254,6 +255,7 @@ class BaseTask(ABC):
             ctx: Task context
             extension: Image format (png, jpg)
             quality: JPEG quality (ignored for PNG)
+            prefix: Optional prefix for filename (e.g., "eval" for eval images)
 
         Returns:
             Path to saved image
@@ -261,7 +263,10 @@ class BaseTask(ABC):
         images_dir = ctx.output_dir / "images"
         images_dir.mkdir(parents=True, exist_ok=True)
 
-        filename = f"{ctx.dataset_name}_{ctx.index:05d}.{extension}"
+        if prefix:
+            filename = f"{prefix}_{ctx.index:05d}.{extension}"
+        else:
+            filename = f"{ctx.dataset_name}_{ctx.index:05d}.{extension}"
         path = images_dir / filename
 
         if extension.lower() in ("jpg", "jpeg"):
