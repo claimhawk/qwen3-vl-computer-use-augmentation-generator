@@ -119,7 +119,7 @@ def annotate_test_image(
     Draws:
     - Red crosshair at the click location
     - Action label near the click point
-    - White bar at bottom with black text showing the prompt
+    - Extends canvas with white bar at bottom for prompt text
 
     Args:
         image_path: Path to the original test image.
@@ -134,12 +134,20 @@ def annotate_test_image(
     """
     from PIL import Image, ImageDraw, ImageFont
 
-    # Load image
-    img = Image.open(image_path).convert("RGB")
-    draw = ImageDraw.Draw(img)
+    # Load original image
+    original = Image.open(image_path).convert("RGB")
+    orig_width, orig_height = original.size
 
+    # Create new canvas with extra height for prompt bar
+    bar_height = 28
+    new_height = orig_height + bar_height
+    img = Image.new("RGB", (orig_width, new_height), (255, 255, 255))
+
+    # Paste original image at top
+    img.paste(original, (0, 0))
+
+    draw = ImageDraw.Draw(img)
     x, y = pixel_coords
-    img_width, img_height = img.size
 
     # Draw crosshair at click location
     crosshair_size = 10
@@ -165,7 +173,7 @@ def annotate_test_image(
 
     # Draw action label near click point
     action_text = f"{action} ({x}, {y})"
-    label_x = min(x + crosshair_size + 5, img_width - 100)
+    label_x = min(x + crosshair_size + 5, orig_width - 100)
     label_y = max(y - 8, 5)
 
     # Background for label
@@ -173,12 +181,8 @@ def annotate_test_image(
     draw.rectangle([bbox[0] - 2, bbox[1] - 2, bbox[2] + 2, bbox[3] + 2], fill=(255, 255, 255))
     draw.text((label_x, label_y), action_text, fill=(255, 0, 0), font=font)
 
-    # Draw prompt bar at bottom
-    bar_height = 24
-    # White background bar
-    draw.rectangle([(0, img_height - bar_height), (img_width, img_height)], fill=(255, 255, 255))
-    # Black text
-    prompt_y = img_height - bar_height + 4
+    # Draw prompt text in the extended area below the original image
+    prompt_y = orig_height + 6
     draw.text((5, prompt_y), f"Prompt: {prompt}", fill=(0, 0, 0), font=prompt_font)
 
     # Determine output path

@@ -6,7 +6,7 @@
 
 from cudag.prompts.system import (
     SYSTEM_PROMPT_COMPACT,
-    SYSTEM_PROMPT_OSWORLD,
+    CUA_SYSTEM_PROMPT,
     get_system_prompt,
 )
 from cudag.prompts.tools import (
@@ -25,7 +25,7 @@ __all__ = [
     "format_tool_call",
     "parse_tool_call",
     "validate_tool_call",
-    "SYSTEM_PROMPT_OSWORLD",
+    "CUA_SYSTEM_PROMPT",
     "SYSTEM_PROMPT_COMPACT",
     "get_system_prompt",
 ]

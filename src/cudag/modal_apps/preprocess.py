@@ -14,6 +14,62 @@ Usage:
 """
 
 import json
+
+# System prompt injected during preprocessing (not stored in training data)
+# fmt: off
+SYSTEM_PROMPT = """# Tools
+
+You may call one or more functions to assist with the user query.
+
+You are provided with function signatures within <tools></tools> XML tags:
+<tools>
+{
+\t"type": "function",
+\t"function": {
+\t\t"name_for_human": "computer_use",
+\t\t"name": "computer_use",
+\t\t"description": "Perform computer actions",
+\t\t"parameters": {
+\t\t\t"properties": {
+\t\t\t\t"action": {
+\t\t\t\t\t"description": "* `key`: Press keys in order, release in reverse.\\n* `type`: Type a string of text.\\n* `mouse_move`: Move the cursor to (x, y).\\n* `left_click`: Left click at (x, y).\\n* `left_click_drag`: Click and drag from current to (x, y).\\n* `right_click`: Right click at (x, y).\\n* `middle_click`: Middle click at (x, y).\\n* `double_click`: Double-click at (x, y).\\n* `triple_click`: Triple-click at (x, y) (simulated as double-click).\\n* `scroll`: Scroll the mouse wheel.\\n* `hscroll`: Horizontal scroll.\\n* `wait`: Wait N seconds.\\n* `terminate`: End the task with a status.\\n* `answer`: Answer a question.",
+\t\t\t\t\t"enum": ["key", "type", "mouse_move", "left_click", "left_click_drag", "right_click", "middle_click", "double_click", "scroll", "wait", "terminate"],
+\t\t\t\t\t"type": "string"
+\t\t\t\t},
+\t\t\t\t"keys": {"description": "Required only by `action=key`.", "type": "array"},
+\t\t\t\t"text": {"description": "Required only by `action=type`.", "type": "string"},
+\t\t\t\t"coordinate": {"description": "Mouse coordinates (1000x1000 normalized).", "type": "array"},
+\t\t\t\t"pixels": {"description": "The amount of scrolling.", "type": "number"},
+\t\t\t\t"time": {"description": "The seconds to wait.", "type": "number"},
+\t\t\t\t"status": {"description": "The status of the task.", "type": "string", "enum": ["success", "failure"]}
+\t\t\t},
+\t\t\t"required": ["action"],
+\t\t\t"type": "object"
+\t\t},
+\t\t"args_format": "Format the arguments as a JSON object."
+\t}
+}
+</tools>
+
+For each function call, return a json object with function name and arguments within
+<tool_call></tool_call> XML tags:
+<tool_call>
+{"name": <function-name>, "arguments": <args-json-object>}
+</tool_call>
+
+# Response format
+
+Response format for every step:
+1) Action: a short imperative describing what to do in the UI.
+2) A single <tool_call>...</tool_call> block containing only the JSON:
+\t{"name": <function-name>, "arguments": <args-json-object>}.
+
+Rules:
+- Output exactly in the order: Action, <tool_call>.
+- Be brief: one sentence for Action.
+- Do not output anything else outside those parts.
+- If finishing, use action=terminate in the tool call."""
+# fmt: on
 import sys
 from pathlib import Path
 
@@ -218,11 +274,16 @@ def preprocess_dataset_impl(dataset_name: str):
         cached_image = image_cache[img_path]
         old_conversations = sample["conversations"]
 
-        # Convert to Qwen-VL format, preserving system prompts from dataset
-        messages = []
+        # Inject system prompt (not stored in training data)
+        messages = [
+            {"role": "system", "content": [{"type": "text", "text": SYSTEM_PROMPT}]}
+        ]
+
+        # Convert to Qwen-VL format, skipping any system prompts from dataset
         for msg in old_conversations:
             if msg["from"] == "system":
-                role = "system"
+                # Skip - we inject our own system prompt above
+                continue
             elif msg["from"] == "human":
                 role = "user"
             else:

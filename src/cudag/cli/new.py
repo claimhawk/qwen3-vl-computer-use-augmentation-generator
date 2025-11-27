@@ -340,7 +340,7 @@ def _write_example_task(project_dir: Path, module_name: str) -> None:
         This is more efficient than generating a new image for each sample.
         """
 
-        from cudag.core import BaseTask, EvalCase, TaskContext, TaskSample
+        from cudag.core import BaseTask, TaskContext, TaskSample, TestCase
         from cudag.prompts.tools import ToolCall
 
         from state import {state_class}
@@ -399,12 +399,12 @@ def _write_example_task(project_dir: Path, module_name: str) -> None:
                 """Generate one training sample (fallback)."""
                 return self.generate_samples(ctx)[0]
 
-            def generate_evals(self, ctx: TaskContext) -> list[EvalCase]:
-                """Generate eval cases from ONE rendered image."""
+            def generate_tests(self, ctx: TaskContext) -> list[TestCase]:
+                """Generate test cases from ONE rendered image."""
                 samples = self.generate_samples(ctx)
                 return [
-                    EvalCase(
-                        eval_id=f"eval_{{ctx.index:04d}}_{{i}}",
+                    TestCase(
+                        test_id=f"test_{{ctx.index:04d}}_{{i}}",
                         screenshot=s.image_path,
                         prompt=s.human_prompt,
                         expected_action=s.tool_call.to_dict(),
@@ -415,9 +415,9 @@ def _write_example_task(project_dir: Path, module_name: str) -> None:
                     for i, s in enumerate(samples)
                 ]
 
-            def generate_eval(self, ctx: TaskContext) -> EvalCase:
-                """Generate one eval case (fallback)."""
-                return self.generate_evals(ctx)[0]
+            def generate_test(self, ctx: TaskContext) -> TestCase:
+                """Generate one test case (fallback)."""
+                return self.generate_tests(ctx)[0]
     ''')
     (project_dir / "tasks" / "example_task.py").write_text(content)
 
@@ -446,8 +446,8 @@ def _write_dataset_config(project_dir: Path, project_name: str) -> None:
           image_format: png
           image_quality: 95
 
-        # Evaluation settings
-        evals:
+        # Test settings (held-out evaluation data)
+        test:
           count: 20
           tolerance: 10
     """)

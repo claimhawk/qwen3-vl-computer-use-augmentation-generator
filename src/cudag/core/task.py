@@ -55,17 +55,17 @@ class TaskSample:
 
 
 @dataclass
-class EvalCase:
-    """Output of eval generation.
+class TestCase:
+    """Output of test case generation.
 
-    This represents a single evaluation case for testing model accuracy.
+    This represents a single test case for evaluating model accuracy.
     """
 
-    eval_id: str
-    """Unique identifier for this eval case."""
+    test_id: str
+    """Unique identifier for this test case."""
 
     screenshot: Path
-    """Path to the eval screenshot."""
+    """Path to the test screenshot."""
 
     prompt: str
     """The human instruction (without <image> prefix)."""
@@ -73,11 +73,11 @@ class EvalCase:
     expected_action: dict[str, Any]
     """Expected tool call as dict (for JSON serialization)."""
 
-    tolerance: int
-    """Allowed coordinate tolerance in RU units."""
+    tolerance: tuple[int, int] | int
+    """Allowed coordinate tolerance (x, y) in RU units."""
 
     metadata: dict[str, Any] = field(default_factory=dict)
-    """Eval-specific metadata."""
+    """Test-specific metadata."""
 
     pixel_coords: tuple[int, int] | None = None
     """Original pixel coordinates (before normalization)."""
@@ -112,7 +112,7 @@ class BaseTask(ABC):
     Subclass this to create new task types. Each task type defines:
     - task_type: Unique identifier (e.g., "click-day", "scroll-grid")
     - generate_samples(): How to generate training samples from one image (1:N)
-    - generate_evals(): How to generate evaluation cases from one image (1:N)
+    - generate_tests(): How to generate test cases from one image (1:N)
 
     The key insight is that one rendered image can produce MULTIPLE training
     samples. For example, a claim window image can have:
@@ -198,32 +198,32 @@ class BaseTask(ABC):
         """
         pass
 
-    def generate_evals(self, ctx: TaskContext) -> list[EvalCase]:
-        """Generate eval cases from one rendered image.
+    def generate_tests(self, ctx: TaskContext) -> list[TestCase]:
+        """Generate test cases from one rendered image.
 
-        Override this to generate multiple evals from a single render.
-        Default implementation calls generate_eval() once for backwards compat.
+        Override this to generate multiple tests from a single render.
+        Default implementation calls generate_test() once for backwards compat.
 
         Args:
             ctx: Task context with RNG, index, output directory, etc.
 
         Returns:
-            List of EvalCase objects (can share the same screenshot).
+            List of TestCase objects (can share the same screenshot).
         """
-        return [self.generate_eval(ctx)]
+        return [self.generate_test(ctx)]
 
     @abstractmethod
-    def generate_eval(self, ctx: TaskContext) -> EvalCase:
-        """Generate one evaluation case.
+    def generate_test(self, ctx: TaskContext) -> TestCase:
+        """Generate one test case.
 
-        For simple 1:1 image-to-eval tasks, implement this.
-        For 1:N image-to-evals, override generate_evals() instead.
+        For simple 1:1 image-to-test tasks, implement this.
+        For 1:N image-to-tests, override generate_tests() instead.
 
         Args:
             ctx: Task context with RNG, index, output directory, etc.
 
         Returns:
-            EvalCase with all required fields populated.
+            TestCase with all required fields populated.
         """
         pass
 

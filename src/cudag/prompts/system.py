@@ -15,9 +15,9 @@ from typing import Literal
 
 from cudag.prompts.tools import ACTION_DESCRIPTIONS, COMPUTER_USE_TOOL
 
-# OSWorld-style verbose system prompt (used by calendar)
+# Computer Using Agent (CUA) verbose system prompt for <tool_calls>
 # fmt: off
-SYSTEM_PROMPT_OSWORLD = """Use a mouse and keyboard to interact with a computer, and take screenshots.
+CUA_SYSTEM_PROMPT = """Use a mouse and keyboard to interact with a computer, and take screenshots.
 * This is an interface to a desktop GUI. You do not have access to a terminal or applications menu. You must click on desktop icons to start applications.
 * Some applications may take time to start or process actions, so you may need to wait and take successive screenshots to see the results of your actions. E.g. if you click on Firefox and a window doesn't open, try wait and taking another screenshot.
 * The screen's resolution is 1000x1000.
@@ -112,7 +112,7 @@ SYSTEM_PROMPT_COMPACT = _build_compact_prompt()
 
 # Available prompt styles
 PROMPT_STYLES = {
-    "osworld": SYSTEM_PROMPT_OSWORLD,
+    "osworld": CUA_SYSTEM_PROMPT,
     "compact": SYSTEM_PROMPT_COMPACT,
 }
 

@@ -57,7 +57,7 @@ from cudag.core import (
     DatasetConfig,
     DateField,
     DropdownRegion,
-    EvalCase,
+    TestCase,
     Field,
     FloatField,
     GridRegion,
@@ -135,7 +135,7 @@ from cudag.core import (
 from cudag.prompts import (
     COMPUTER_USE_TOOL,
     SYSTEM_PROMPT_COMPACT,
-    SYSTEM_PROMPT_OSWORLD,
+    CUA_SYSTEM_PROMPT,
     TOOL_ACTIONS,
     ToolCall,
     format_tool_call,
@@ -180,7 +180,7 @@ __all__ = [
     "BaseTask",
     "TaskSample",
     "TaskContext",
-    "EvalCase",
+    "TestCase",
     # Dataset
     "DatasetBuilder",
     "DatasetConfig",
@@ -252,7 +252,7 @@ __all__ = [
     "format_tool_call",
     "parse_tool_call",
     "validate_tool_call",
-    "SYSTEM_PROMPT_OSWORLD",
+    "CUA_SYSTEM_PROMPT",
     "SYSTEM_PROMPT_COMPACT",
     "get_system_prompt",
 ]

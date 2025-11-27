@@ -237,7 +237,7 @@ def format_tool_call(tool_call: ToolCall | dict[str, Any]) -> str:
         data = tool_call
 
     json_str = json.dumps(data)
-    return f"\n<tool_call>\n{json_str}\n</tool_call>"
+    return f"<tool_call>\n{json_str}\n</tool_call>"
 
 
 # Regex pattern for parsing tool calls
