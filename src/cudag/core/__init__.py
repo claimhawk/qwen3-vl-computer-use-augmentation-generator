@@ -30,6 +30,13 @@ from cudag.core.button import (
 )
 from cudag.core.canvas import CanvasConfig, RegionConfig
 from cudag.core.grid import Grid, GridCell, GridGeometry
+from cudag.core.scrollable_grid import (
+    ColumnDef,
+    RowLayout,
+    ScrollableGrid,
+    ScrollableGridGeometry,
+    ScrollState as GridScrollState,
+)
 from cudag.core.icon import (
     APP_ICON_LARGE,
     APP_ICON_SMALL,
@@ -158,6 +165,12 @@ __all__ = [
     "Grid",
     "GridCell",
     "GridGeometry",
+    # Scrollable Grid
+    "ScrollableGrid",
+    "ScrollableGridGeometry",
+    "ColumnDef",
+    "RowLayout",
+    "GridScrollState",
     # Icons
     "IconSpec",
     "IconPlacement",
