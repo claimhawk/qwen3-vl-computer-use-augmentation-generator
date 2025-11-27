@@ -1,0 +1,964 @@
+# Copyright (c) 2025 Tylt LLC. All rights reserved.
+# Derivative works may be released by researchers,
+# but original files may not be redistributed or used beyond research purposes.
+
+"""Project scaffolding for cudag new command."""
+
+from __future__ import annotations
+
+from pathlib import Path
+from textwrap import dedent
+
+
+def create_project(name: str, parent_dir: Path) -> Path:
+    """Create a new CUDAG project with scaffolding.
+
+    Args:
+        name: Project name (e.g., "appointment-picker")
+        parent_dir: Directory to create project in
+
+    Returns:
+        Path to created project directory
+    """
+    # Normalize name
+    project_name = name.lower().replace(" ", "-").replace("_", "-")
+    module_name = project_name.replace("-", "_")
+
+    project_dir = parent_dir / project_name
+    project_dir.mkdir(parents=True, exist_ok=True)
+
+    # Create directory structure
+    (project_dir / "config").mkdir(exist_ok=True)
+    (project_dir / "tasks").mkdir(exist_ok=True)
+    (project_dir / "assets").mkdir(exist_ok=True)
+    (project_dir / "datasets").mkdir(exist_ok=True)
+    (project_dir / "models").mkdir(exist_ok=True)
+    (project_dir / "scripts").mkdir(exist_ok=True)
+
+    # Create files
+    _write_pyproject(project_dir, project_name, module_name)
+    _write_gitignore(project_dir)
+    _write_screen(project_dir, module_name)
+    _write_state(project_dir, module_name)
+    _write_renderer(project_dir, module_name)
+    _write_models_init(project_dir, module_name)
+    _write_tasks_init(project_dir)
+    _write_example_task(project_dir, module_name)
+    _write_dataset_config(project_dir, project_name)
+    _write_readme(project_dir, project_name)
+    _write_scripts(project_dir, module_name)
+    _write_makefile(project_dir, module_name)
+    _write_copyright(project_dir)
+    _init_git(project_dir)
+
+    return project_dir
+
+
+def _write_pyproject(project_dir: Path, project_name: str, module_name: str) -> None:
+    """Write pyproject.toml."""
+    content = dedent(f'''\
+        [build-system]
+        requires = ["hatchling"]
+        build-backend = "hatchling.build"
+
+        [project]
+        name = "{project_name}"
+        version = "0.1.0"
+        description = "CUDAG project for {project_name}"
+        requires-python = ">=3.11"
+        dependencies = [
+            "cudag",
+            "pillow>=10.0.0",
+        ]
+
+        [project.optional-dependencies]
+        dev = [
+            "ruff>=0.1.0",
+            "mypy>=1.0.0",
+        ]
+
+        [tool.hatch.build.targets.wheel]
+        packages = ["."]
+
+        [tool.ruff]
+        line-length = 100
+        target-version = "py311"
+
+        [tool.mypy]
+        python_version = "3.11"
+        strict = true
+    ''')
+    (project_dir / "pyproject.toml").write_text(content)
+
+
+def _write_gitignore(project_dir: Path) -> None:
+    """Write .gitignore."""
+    content = dedent("""\
+        # Python
+        __pycache__/
+        *.py[cod]
+        .venv/
+        *.egg-info/
+
+        # Generated datasets
+        datasets/
+
+        # IDE
+        .idea/
+        .vscode/
+        *.swp
+    """)
+    (project_dir / ".gitignore").write_text(content)
+
+
+def _write_screen(project_dir: Path, module_name: str) -> None:
+    """Write screen.py with example Screen class."""
+    class_name = "".join(word.title() for word in module_name.split("_")) + "Screen"
+    renderer_name = class_name.replace("Screen", "Renderer")
+
+    content = dedent(f'''\
+        # Copyright (c) 2025 Tylt LLC. All rights reserved.
+        # Derivative works may be released by researchers,
+        # but original files may not be redistributed or used beyond research purposes.
+
+        """Screen definition for {module_name}."""
+
+        from typing import Any, NoReturn
+
+        from cudag.core import Screen
+
+        # Uncomment to use these region types:
+        # from cudag.core import Bounds, ButtonRegion, GridRegion, ClickRegion
+
+
+        class {class_name}(Screen):
+            """Define the screen layout and interactive regions.
+
+            Edit this class to define your screen's regions:
+            - ButtonRegion for clickable buttons
+            - GridRegion for grid-like clickable areas
+            - ScrollRegion for scrollable areas
+            - DropdownRegion for dropdown menus
+            """
+
+            class Meta:
+                name = "{module_name}"
+                base_image = "assets/base.png"  # Your base screenshot
+                size = (800, 600)  # Image dimensions
+
+            # Example: Define a clickable grid region
+            # grid = GridRegion(
+            #     bounds=Bounds(x=100, y=100, width=400, height=300),
+            #     rows=5,
+            #     cols=4,
+            # )
+
+            # Example: Define a button
+            # submit_button = ButtonRegion(
+            #     bounds=Bounds(x=350, y=450, width=100, height=40),
+            #     label="Submit",
+            #     description="Submit the form",
+            # )
+
+            def render(self, state: Any) -> NoReturn:
+                """Render is handled by the Renderer class."""
+                raise NotImplementedError("Use {renderer_name} instead")
+    ''')
+    (project_dir / "screen.py").write_text(content)
+
+
+def _write_state(project_dir: Path, module_name: str) -> None:
+    """Write state.py with example State class."""
+    class_name = "".join(word.title() for word in module_name.split("_")) + "State"
+
+    content = dedent(f'''\
+        # Copyright (c) 2025 Tylt LLC. All rights reserved.
+        # Derivative works may be released by researchers,
+        # but original files may not be redistributed or used beyond research purposes.
+
+        """State definition for {module_name}."""
+
+        from dataclasses import dataclass
+        from cudag.core import BaseState
+
+
+        @dataclass
+        class {class_name}(BaseState):
+            """Dynamic data that populates the screen.
+
+            Add fields for all the data needed to render your screen.
+            """
+
+            # Example fields - replace with your own:
+            # selected_item: int = 0
+            # items: list[str] = field(default_factory=list)
+
+            pass  # Remove this when you add fields
+    ''')
+    (project_dir / "state.py").write_text(content)
+
+
+def _write_renderer(project_dir: Path, module_name: str) -> None:
+    """Write renderer.py with example Renderer class."""
+    screen_class = "".join(word.title() for word in module_name.split("_")) + "Screen"
+    state_class = "".join(word.title() for word in module_name.split("_")) + "State"
+    renderer_class = "".join(word.title() for word in module_name.split("_")) + "Renderer"
+
+    content = dedent(f'''\
+        # Copyright (c) 2025 Tylt LLC. All rights reserved.
+        # Derivative works may be released by researchers,
+        # but original files may not be redistributed or used beyond research purposes.
+
+        """Renderer for {module_name}."""
+
+        from typing import Any
+
+        from PIL import Image
+
+        from cudag.core import BaseRenderer
+
+        from screen import {screen_class}
+        from state import {state_class}
+
+
+        class {renderer_class}(BaseRenderer[{state_class}]):
+            """Renders the {module_name} screen.
+
+            Loads assets and generates images from state.
+            """
+
+            screen_class = {screen_class}
+
+            def load_assets(self) -> None:
+                """Load fonts and other assets."""
+                # Example:
+                # from PIL import ImageFont
+                # self.font = ImageFont.truetype(self.asset_path("fonts", "arial.ttf"), 12)
+                pass
+
+            def render(self, state: {state_class}) -> tuple[Image.Image, dict[str, Any]]:
+                """Render the screen with given state.
+
+                Args:
+                    state: Current screen state
+
+                Returns:
+                    (PIL Image, metadata dict)
+                """
+                # Load base image
+                image = self.load_base_image()
+
+                # TODO: Draw state onto image
+                # Example:
+                # draw = ImageDraw.Draw(image)
+                # draw.text((100, 100), state.some_field, fill="black")
+
+                # Build metadata
+                metadata = self.build_metadata(state)
+
+                return image, metadata
+    ''')
+    (project_dir / "renderer.py").write_text(content)
+
+
+def _write_models_init(project_dir: Path, module_name: str) -> None:
+    """Write models/__init__.py with example Model classes."""
+    content = dedent(f'''\
+        # Copyright (c) 2025 Tylt LLC. All rights reserved.
+        # Derivative works may be released by researchers,
+        # but original files may not be redistributed or used beyond research purposes.
+
+        """Domain models for {module_name}.
+
+        Define your data types here (Patient, Provider, Claim, etc.)
+        with field definitions for realistic data generation.
+        """
+
+        # Re-export common models for use in this project
+        from cudag.core import Claim as Claim
+        from cudag.core import Patient as Patient
+        from cudag.core import Procedure as Procedure
+        from cudag.core import Provider as Provider
+
+        # Import types for custom model definitions:
+        # from cudag.core import (
+        #     Model,
+        #     StringField,
+        #     IntField,
+        #     DateField,
+        #     ChoiceField,
+        #     MoneyField,
+        # )
+
+        # Example: Define a custom model
+        # class MyCustomModel(Model):
+        #     name = StringField(faker="full_name")
+        #     account_number = StringField(pattern=r"[A-Z]{{2}}[0-9]{{8}}")
+        #     status = ChoiceField(choices=["Active", "Pending", "Closed"])
+
+        __all__ = [
+            "Patient",
+            "Provider",
+            "Procedure",
+            "Claim",
+        ]
+    ''')
+    (project_dir / "models" / "__init__.py").write_text(content)
+
+
+def _write_tasks_init(project_dir: Path) -> None:
+    """Write tasks/__init__.py."""
+    content = dedent('''\
+        # Copyright (c) 2025 Tylt LLC. All rights reserved.
+        # Derivative works may be released by researchers,
+        # but original files may not be redistributed or used beyond research purposes.
+
+        """Task definitions for this project."""
+
+        # Import your tasks here:
+        # from tasks.click_item import ClickItemTask
+    ''')
+    (project_dir / "tasks" / "__init__.py").write_text(content)
+
+
+def _write_example_task(project_dir: Path, module_name: str) -> None:
+    """Write an example task file."""
+    state_class = "".join(word.title() for word in module_name.split("_")) + "State"
+
+    content = dedent(f'''\
+        # Copyright (c) 2025 Tylt LLC. All rights reserved.
+        # Derivative works may be released by researchers,
+        # but original files may not be redistributed or used beyond research purposes.
+
+        """Example task - demonstrates 1-image-to-many-samples pattern.
+
+        Key insight: One rendered image can produce MULTIPLE training samples.
+        This is more efficient than generating a new image for each sample.
+        """
+
+        from cudag.core import BaseTask, EvalCase, TaskContext, TaskSample
+        from cudag.prompts.tools import ToolCall
+
+        from state import {state_class}
+
+
+        class ExampleTask(BaseTask):
+            """Example task demonstrating 1:N image-to-samples pattern.
+
+            One Screen can have many Tasks. Each Task:
+            - Belongs to a Screen
+            - Has a task_type identifier
+            - Can generate multiple samples from one rendered image
+
+            Example use cases:
+            - Same claim window -> "click code" + "click fee" + "scroll"
+            - Same calendar -> "click day 1" + "click day 15"
+            """
+
+            task_type = "example-click"
+
+            def generate_samples(self, ctx: TaskContext) -> list[TaskSample]:
+                """Generate MULTIPLE samples from ONE rendered image."""
+                # 1. Create state and render ONCE
+                state = {state_class}()
+                image, metadata = self.renderer.render(state)
+                image_path = self.save_image(image, ctx)
+
+                samples = []
+
+                # 2. Derive multiple samples from this one image
+                # Sample 1: Click first target
+                samples.append(TaskSample(
+                    id=self.build_id(ctx, "_target1"),
+                    image_path=image_path,
+                    human_prompt="Click the first item",
+                    tool_call=ToolCall.left_click((400, 300)),
+                    pixel_coords=(400, 300),
+                    metadata={{"task_type": self.task_type, "target": "first"}},
+                    image_size=image.size,
+                ))
+
+                # Sample 2: Click second target (SAME IMAGE)
+                samples.append(TaskSample(
+                    id=self.build_id(ctx, "_target2"),
+                    image_path=image_path,
+                    human_prompt="Click the second item",
+                    tool_call=ToolCall.left_click((500, 400)),
+                    pixel_coords=(500, 400),
+                    metadata={{"task_type": self.task_type, "target": "second"}},
+                    image_size=image.size,
+                ))
+
+                return samples
+
+            def generate_sample(self, ctx: TaskContext) -> TaskSample:
+                """Generate one training sample (fallback)."""
+                return self.generate_samples(ctx)[0]
+
+            def generate_evals(self, ctx: TaskContext) -> list[EvalCase]:
+                """Generate eval cases from ONE rendered image."""
+                samples = self.generate_samples(ctx)
+                return [
+                    EvalCase(
+                        eval_id=f"eval_{{ctx.index:04d}}_{{i}}",
+                        screenshot=s.image_path,
+                        prompt=s.human_prompt,
+                        expected_action=s.tool_call.to_dict(),
+                        tolerance=10,
+                        metadata=s.metadata,
+                        pixel_coords=s.pixel_coords,
+                    )
+                    for i, s in enumerate(samples)
+                ]
+
+            def generate_eval(self, ctx: TaskContext) -> EvalCase:
+                """Generate one eval case (fallback)."""
+                return self.generate_evals(ctx)[0]
+    ''')
+    (project_dir / "tasks" / "example_task.py").write_text(content)
+
+
+def _write_dataset_config(project_dir: Path, project_name: str) -> None:
+    """Write config/dataset.yaml."""
+    content = dedent(f"""\
+        # Dataset configuration for {project_name}
+
+        name_prefix: {project_name}
+        seed: 42
+
+        # Task counts - how many samples of each type
+        tasks:
+          example-click: 100
+
+        # Train/test split
+        splits:
+          train: 0.8
+
+        # System prompt style: "osworld" or "compact"
+        system_prompt: compact
+
+        # Output settings
+        output:
+          image_format: png
+          image_quality: 95
+
+        # Evaluation settings
+        evals:
+          count: 20
+          tolerance: 10
+    """)
+    (project_dir / "config" / "dataset.yaml").write_text(content)
+
+
+def _write_readme(project_dir: Path, project_name: str) -> None:
+    """Write README.md."""
+    content = dedent(f"""\
+        # {project_name}
+
+        CUDAG project for generating training data.
+
+        ## Setup
+
+        ```bash
+        pip install -e .
+        ```
+
+        ## Structure
+
+        - `screen.py` - Screen definition (regions, layout)
+        - `state.py` - State dataclass (dynamic data)
+        - `renderer.py` - Image rendering logic
+        - `models/` - Domain model definitions (Patient, Provider, etc.)
+        - `tasks/` - Task implementations
+        - `config/` - Dataset configurations
+        - `assets/` - Base images, fonts, etc.
+
+        ## Usage
+
+        ```bash
+        # Generate dataset
+        cudag generate --config config/dataset.yaml
+
+        # Or run directly
+        python generate.py --config config/dataset.yaml
+        ```
+
+        ## Development
+
+        1. Edit `screen.py` to define your UI regions
+        2. Edit `state.py` to define your data model
+        3. Edit `renderer.py` to implement image generation
+        4. Add domain models in `models/` for data generation
+        5. Add tasks in `tasks/` for each interaction type
+        6. Configure dataset.yaml with sample counts
+    """)
+    (project_dir / "README.md").write_text(content)
+
+
+def _write_scripts(project_dir: Path, module_name: str) -> None:
+    """Write shell scripts for the project."""
+    import stat
+
+    # generate.sh
+    generate_sh = dedent(f'''\
+        #!/usr/bin/env bash
+        # Copyright (c) 2025 Tylt LLC. All rights reserved.
+        # Derivative works may be released by researchers,
+        # but original files may not be redistributed or used beyond research purposes.
+
+        # Usage:
+        #   ./scripts/generate.sh [options]        # Generate and auto-upload
+        #   ./scripts/generate.sh --dry [options]  # Generate only, no upload
+
+        set -euo pipefail
+
+        DRY_RUN=false
+        EXTRA_ARGS=()
+
+        # Parse args - extract --dry, pass everything else through
+        for arg in "$@"; do
+            if [[ "$arg" == "--dry" ]]; then
+                DRY_RUN=true
+            else
+                EXTRA_ARGS+=("$arg")
+            fi
+        done
+
+        echo "========================================"
+        echo "STAGE 1: Generate Dataset"
+        echo "========================================"
+        echo ""
+
+        if [[ "$DRY_RUN" == "true" ]]; then
+            echo "[DRY RUN] Will generate but NOT upload"
+            echo ""
+        fi
+
+        # Run the dataset generation
+        # Use --with to add cudag from local path without needing to install this project
+        if [[ ${{#EXTRA_ARGS[@]}} -gt 0 ]]; then
+            uv run --with pillow python generator.py "${{EXTRA_ARGS[@]}}"
+        else
+            uv run --with pillow python generator.py
+        fi
+
+        if [[ $? -ne 0 ]]; then
+            echo ""
+            echo "Dataset generation failed"
+            exit 1
+        fi
+
+        # Find the most recently created dataset directory
+        LATEST_DATASET=$(ls -td datasets/*/ 2>/dev/null | head -1)
+
+        if [[ -z "$LATEST_DATASET" ]]; then
+            echo ""
+            echo "No dataset directory found"
+            exit 1
+        fi
+
+        DATASET_NAME=$(basename "$LATEST_DATASET")
+        echo ""
+        echo "Generated dataset: $DATASET_NAME"
+
+        if [[ "$DRY_RUN" == "true" ]]; then
+            echo ""
+            echo "[DRY RUN] Skipping upload"
+            echo ""
+            echo "To upload manually:"
+            echo "  ./scripts/upload.sh datasets/$DATASET_NAME"
+            exit 0
+        fi
+
+        echo ""
+        echo "========================================"
+        echo "Auto-starting upload..."
+        echo "========================================"
+        echo ""
+
+        exec ./scripts/upload.sh "datasets/$DATASET_NAME"
+    ''')
+    generate_path = project_dir / "scripts" / "generate.sh"
+    generate_path.write_text(generate_sh)
+    generate_path.chmod(generate_path.stat().st_mode | stat.S_IXUSR | stat.S_IXGRP | stat.S_IXOTH)
+
+    # build.sh
+    build_sh = dedent('''\
+        #!/usr/bin/env bash
+        # Copyright (c) 2025 Tylt LLC. All rights reserved.
+        # Derivative works may be released by researchers,
+        # but original files may not be redistributed or used beyond research purposes.
+
+        set -euo pipefail
+
+        repo_root="$(git rev-parse --show-toplevel 2>/dev/null || pwd)"
+        cd "$repo_root"
+
+        "$repo_root/scripts/pre-commit.sh" --all
+    ''')
+    build_path = project_dir / "scripts" / "build.sh"
+    build_path.write_text(build_sh)
+    build_path.chmod(build_path.stat().st_mode | stat.S_IXUSR | stat.S_IXGRP | stat.S_IXOTH)
+
+    # pre-commit.sh
+    precommit_sh = dedent('''\
+        #!/usr/bin/env bash
+        # Copyright (c) 2025 Tylt LLC. All rights reserved.
+        # Derivative works may be released by researchers,
+        # but original files may not be redistributed or used beyond research purposes.
+
+        set -euo pipefail
+
+        mode="${1:-staged}"
+
+        if [ "$mode" = "--help" ] || [ "$mode" = "-h" ]; then
+          echo "Usage: $0 [--all]" >&2
+          echo "  --all   Run checks against all tracked Python files instead of staged ones." >&2
+          exit 0
+        fi
+
+        repo_root="$(git rev-parse --show-toplevel 2>/dev/null || pwd)"
+        cd "$repo_root"
+
+        if [ "$mode" = "--all" ]; then
+          py_targets=$(git ls-files -- '*.py' 2>/dev/null || find . -name '*.py' -type f)
+          scope_label="all Python files"
+        else
+          py_targets=$(git diff --cached --name-only --diff-filter=ACM -- '*.py' 2>/dev/null || true)
+          scope_label="staged Python files"
+        fi
+
+        if [ -z "$py_targets" ]; then
+          echo "No ${scope_label}. Skipping lint/type checks."
+          exit 0
+        fi
+
+        python_bin="python"
+        if ! command -v "$python_bin" >/dev/null 2>&1; then
+          python_bin="python3"
+        fi
+
+        if command -v ruff >/dev/null 2>&1; then
+          ruff_cmd="ruff"
+        else
+          ruff_cmd="$python_bin -m ruff"
+        fi
+
+        if command -v mypy >/dev/null 2>&1; then
+          mypy_cmd="mypy"
+        else
+          mypy_cmd="$python_bin -m mypy"
+        fi
+
+        echo "Running ruff (lexical checks) on ${scope_label}..."
+        printf '%s\\n' "$py_targets" | xargs -r $ruff_cmd check
+
+        echo "Running mypy (syntax & types) on ${scope_label}..."
+        printf '%s\\n' "$py_targets" | xargs -r $mypy_cmd
+    ''')
+    precommit_path = project_dir / "scripts" / "pre-commit.sh"
+    precommit_path.write_text(precommit_sh)
+    precommit_path.chmod(precommit_path.stat().st_mode | stat.S_IXUSR | stat.S_IXGRP | stat.S_IXOTH)
+
+    # upload.sh
+    upload_sh = dedent('''\
+        #!/usr/bin/env bash
+        # Copyright (c) 2025 Tylt LLC. All rights reserved.
+        # Derivative works may be released by researchers,
+        # but original files may not be redistributed or used beyond research purposes.
+
+        # Usage:
+        #   ./scripts/upload.sh [dataset_dir]       # Upload to Modal volume
+        #   ./scripts/upload.sh --dry [dataset_dir] # Dry run, show what would be uploaded
+
+        set -euo pipefail
+
+        DRY_RUN=false
+        DATASET_DIR=""
+
+        # Parse args
+        for arg in "$@"; do
+            if [[ "$arg" == "--dry" ]]; then
+                DRY_RUN=true
+            elif [[ -z "$DATASET_DIR" && ! "$arg" =~ ^-- ]]; then
+                DATASET_DIR="$arg"
+            fi
+        done
+
+        echo "========================================"
+        echo "STAGE 2: Upload Dataset"
+        echo "========================================"
+        echo ""
+
+        if [[ -z "$DATASET_DIR" ]]; then
+            # Find most recent dataset
+            DATASET_DIR=$(ls -td datasets/*/ 2>/dev/null | head -1)
+            if [[ -z "$DATASET_DIR" ]]; then
+                echo "No dataset directory found. Specify path or run generate.sh first."
+                exit 1
+            fi
+        fi
+
+        DATASET_NAME=$(basename "$DATASET_DIR")
+        echo "Dataset: $DATASET_NAME"
+        echo "Path: $DATASET_DIR"
+        echo ""
+
+        if [[ "$DRY_RUN" == "true" ]]; then
+            echo "[DRY RUN] Would upload: $DATASET_DIR"
+            exit 0
+        fi
+
+        # Upload via Modal (customize this for your setup)
+        echo "Uploading to Modal volume..."
+        uv run python -m modal_apps.upload "$DATASET_DIR"
+
+        echo ""
+        echo "Upload complete: $DATASET_NAME"
+    ''')
+    upload_path = project_dir / "scripts" / "upload.sh"
+    upload_path.write_text(upload_sh)
+    upload_path.chmod(upload_path.stat().st_mode | stat.S_IXUSR | stat.S_IXGRP | stat.S_IXOTH)
+
+    # preprocess.sh
+    preprocess_sh = dedent('''\
+        #!/usr/bin/env bash
+        # Copyright (c) 2025 Tylt LLC. All rights reserved.
+        # Derivative works may be released by researchers,
+        # but original files may not be redistributed or used beyond research purposes.
+
+        # Pipeline: generate.sh -> upload.sh -> preprocess.sh
+        #
+        # Usage:
+        #   ./scripts/preprocess.sh --dataset-name <NAME>
+
+        set -euo pipefail
+
+        DATASET_NAME=""
+
+        while [[ $# -gt 0 ]]; do
+            case "$1" in
+                --dataset-name)
+                    DATASET_NAME="${2:-}"
+                    shift 2
+                    ;;
+                *)
+                    shift
+                    ;;
+            esac
+        done
+
+        if [[ -z "$DATASET_NAME" ]]; then
+            echo "Error: --dataset-name <NAME> is required"
+            exit 1
+        fi
+
+        echo "========================================"
+        echo "STAGE 3: Preprocess Dataset"
+        echo "========================================"
+        echo ""
+        echo "Dataset: $DATASET_NAME"
+        echo ""
+
+        # Run preprocessing (customize for your setup)
+        uvx modal run --detach modal_apps/preprocess.py --dataset-name "$DATASET_NAME"
+
+        echo ""
+        echo "Preprocessing job started for: $DATASET_NAME"
+    ''')
+    preprocess_path = project_dir / "scripts" / "preprocess.sh"
+    preprocess_path.write_text(preprocess_sh)
+    preprocess_path.chmod(preprocess_path.stat().st_mode | stat.S_IXUSR | stat.S_IXGRP | stat.S_IXOTH)
+
+    # archive.sh
+    archive_sh = dedent('''\
+        #!/usr/bin/env bash
+        # Copyright (c) 2025 Tylt LLC. All rights reserved.
+        # Derivative works may be released by researchers,
+        # but original files may not be redistributed or used beyond research purposes.
+
+        # Archive a dataset directory into a tar.gz file
+        #
+        # Usage:
+        #   ./scripts/archive.sh [dataset_dir]
+
+        set -euo pipefail
+
+        DATASET_DIR="${1:-}"
+
+        if [[ -z "$DATASET_DIR" ]]; then
+            # Find most recent dataset
+            DATASET_DIR=$(ls -td datasets/*/ 2>/dev/null | head -1)
+            if [[ -z "$DATASET_DIR" ]]; then
+                echo "No dataset directory found. Specify path or run generate.sh first."
+                exit 1
+            fi
+        fi
+
+        DATASET_NAME=$(basename "$DATASET_DIR")
+        ARCHIVE_NAME="datasets/${DATASET_NAME}.tar.gz"
+
+        echo "Archiving: $DATASET_DIR"
+        echo "Output: $ARCHIVE_NAME"
+
+        tar -czvf "$ARCHIVE_NAME" -C "$(dirname "$DATASET_DIR")" "$DATASET_NAME"
+
+        echo ""
+        echo "Archive created: $ARCHIVE_NAME"
+    ''')
+    archive_path = project_dir / "scripts" / "archive.sh"
+    archive_path.write_text(archive_sh)
+    archive_path.chmod(archive_path.stat().st_mode | stat.S_IXUSR | stat.S_IXGRP | stat.S_IXOTH)
+
+
+def _write_makefile(project_dir: Path, module_name: str) -> None:
+    """Write Makefile for code quality and build tasks."""
+    content = dedent(f'''\
+        # Copyright (c) 2025 Tylt LLC. All rights reserved.
+        # Derivative works may be released by researchers,
+        # but original files may not be redistributed or used beyond research purposes.
+
+        .PHONY: all check lint typecheck format clean install dev test build generate
+
+        # Use venv Python if available, fallback to python3
+        PYTHON := $(shell test -x .venv/bin/python && echo .venv/bin/python || echo python3)
+        SRC_FILES := $(shell find . -name "*.py" -not -path "./.venv/*")
+
+        # Default target
+        all: check
+
+        # Setup virtualenv and install dependencies
+        install:
+        \tpython3 -m venv .venv
+        \t.venv/bin/pip install -e .
+
+        # Install dev dependencies
+        dev: install
+        \t.venv/bin/pip install -e ".[dev]"
+        \t.venv/bin/pip install radon
+
+        # Run all quality checks
+        check: lint typecheck
+        \t@echo "✓ All checks passed!"
+
+        # Linting with ruff
+        lint:
+        \t@echo "Running ruff..."
+        \t$(PYTHON) -m ruff check $(SRC_FILES)
+        \t$(PYTHON) -m ruff format --check $(SRC_FILES)
+
+        # Type checking with mypy
+        typecheck:
+        \t@echo "Running mypy..."
+        \t$(PYTHON) -m mypy $(SRC_FILES) --strict
+
+        # Auto-format code
+        format:
+        \t@echo "Formatting code..."
+        \t$(PYTHON) -m ruff format $(SRC_FILES)
+        \t$(PYTHON) -m ruff check --fix $(SRC_FILES)
+
+        # Clean build artifacts
+        clean:
+        \trm -rf build/ dist/ *.egg-info/
+        \tfind . -type d -name __pycache__ -exec rm -rf {{}} + 2>/dev/null || true
+        \tfind . -type f -name "*.pyc" -delete 2>/dev/null || true
+
+        # Generate dataset
+        generate:
+        \t./scripts/generate.sh --dry
+
+        # Build and upload
+        build:
+        \t./scripts/build.sh
+    ''')
+    (project_dir / "Makefile").write_text(content)
+
+
+def _write_copyright(project_dir: Path) -> None:
+    """Write COPYRIGHT.txt file."""
+    content = dedent('''\
+        Copyright (c) 2025 Tylt LLC. All rights reserved.
+
+        Derivative works may be released by researchers,
+        but original files may not be redistributed or used beyond research purposes.
+    ''')
+    (project_dir / "COPYRIGHT.txt").write_text(content)
+
+
+def _init_git(project_dir: Path) -> None:
+    """Initialize git repository with pre-commit hook."""
+    import subprocess
+
+    # Initialize git
+    subprocess.run(["git", "init"], cwd=project_dir, capture_output=True)
+
+    # Create .git/hooks directory if needed
+    hooks_dir = project_dir / ".git" / "hooks"
+    hooks_dir.mkdir(parents=True, exist_ok=True)
+
+    # Write pre-commit hook
+    precommit_hook = dedent('''\
+        #!/usr/bin/env bash
+        # Pre-commit hook - runs code quality checks on staged files
+
+        exec ./scripts/pre-commit.sh
+    ''')
+    hook_path = hooks_dir / "pre-commit"
+    hook_path.write_text(precommit_hook)
+    hook_path.chmod(hook_path.stat().st_mode | 0o755)
+
+    # Write .gitattributes
+    gitattributes = dedent('''\
+        # Auto detect text files and perform LF normalization
+        * text=auto
+
+        # Python files
+        *.py text diff=python
+
+        # Shell scripts
+        *.sh text eol=lf
+
+        # Binary files
+        *.png binary
+        *.jpg binary
+        *.jpeg binary
+        *.gif binary
+        *.ico binary
+        *.ttf binary
+        *.woff binary
+        *.woff2 binary
+    ''')
+    (project_dir / ".gitattributes").write_text(gitattributes)
+
+    # Stage all files
+    subprocess.run(["git", "add", "."], cwd=project_dir, capture_output=True)
+
+    # Make initial commit (skip hooks since cudag isn't installed yet)
+    result = subprocess.run(
+        [
+            "git",
+            "commit",
+            "--no-verify",  # Skip pre-commit hook (cudag not installed yet)
+            "-m",
+            "Initial project scaffolding from cudag new",
+        ],
+        cwd=project_dir,
+        capture_output=True,
+    )
+
+    # If commit failed due to missing author, try with explicit author
+    if result.returncode != 0:
+        subprocess.run(
+            [
+                "git",
+                "-c", "user.email=cudag@example.com",
+                "-c", "user.name=CUDAG",
+                "commit",
+                "--no-verify",
+                "-m",
+                "Initial project scaffolding from cudag new",
+            ],
+            cwd=project_dir,
+            capture_output=True,
+        )

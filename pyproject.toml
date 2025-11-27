@@ -1,0 +1,73 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "cudag"
+version = "0.1.0"
+description = "CUDAG - ComputerUseDataAugmentedGeneration framework for building VLM training data generators"
+readme = "README.md"
+license = {text = "Proprietary"}
+requires-python = ">=3.11"
+authors = [
+    {name = "Tylt LLC", email = "dev@tylt.ai"},
+]
+keywords = ["vlm", "training-data", "computer-use", "vision-language-model", "dataset-generation"]
+classifiers = [
+    "Development Status :: 4 - Beta",
+    "Intended Audience :: Developers",
+    "Intended Audience :: Science/Research",
+    "License :: Other/Proprietary License",
+    "Operating System :: OS Independent",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
+    "Topic :: Scientific/Engineering :: Artificial Intelligence",
+    "Typing :: Typed",
+]
+dependencies = [
+    "pillow>=10.0.0",
+    "pyyaml>=6.0",
+    "click>=8.0",
+    "modal>=0.60.0",
+]
+
+[project.optional-dependencies]
+dev = [
+    "ruff>=0.1.0",
+    "mypy>=1.0.0",
+    "pytest>=7.0.0",
+    "types-PyYAML",
+]
+
+[project.urls]
+Homepage = "https://github.com/tylt/cudag"
+Documentation = "https://github.com/tylt/cudag#readme"
+Repository = "https://github.com/tylt/cudag"
+Issues = "https://github.com/tylt/cudag/issues"
+
+[project.scripts]
+cudag = "cudag.cli.main:cli"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/cudag"]
+
+[tool.ruff]
+line-length = 100
+target-version = "py311"
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "N", "W", "UP"]
+
+[tool.ruff.lint.per-file-ignores]
+# System prompts contain literal text that must stay intact
+"src/cudag/prompts/system.py" = ["E501"]
+
+[tool.mypy]
+python_version = "3.11"
+strict = true
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+python_files = ["test_*.py"]
