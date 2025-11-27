@@ -13,6 +13,7 @@ from cudag.core.coords import (
     normalize_coord,
     pixel_from_normalized,
 )
+from cudag.core.grid import Grid, GridCell, GridGeometry
 from cudag.core.dataset import DatasetBuilder, DatasetConfig
 from cudag.core.models import (
     # Classes
@@ -96,7 +97,7 @@ from cudag.core.screen import (
     scrollable,
 )
 from cudag.core.state import BaseState, ScrollState
-from cudag.core.task import BaseTask, EvalCase, TaskContext, TaskSample
+from cudag.core.task import BaseTask, TaskContext, TaskSample, TestCase
 
 __all__ = [
     # Coordinates
@@ -124,6 +125,10 @@ __all__ = [
     "grid",
     "scrollable",
     "dropdown",
+    # Grid
+    "Grid",
+    "GridCell",
+    "GridGeometry",
     # State
     "BaseState",
     "ScrollState",
@@ -133,7 +138,7 @@ __all__ = [
     "BaseTask",
     "TaskSample",
     "TaskContext",
-    "EvalCase",
+    "TestCase",
     # Dataset
     "DatasetBuilder",
     "DatasetConfig",
