@@ -388,3 +388,11 @@ AI-assisted code is welcome provided it includes tests and passes all checks.
 ## License
 
 Copyright (c) 2025 Tylt LLC. All rights reserved.
+
+This software is source-available for **research and educational purposes only**.
+Commercial use requires a separate license agreement with Tylt LLC (1% of annual
+gross revenue attributable to use of this software).
+
+See [LICENSE](./LICENSE) for full terms.
+
+For commercial licensing inquiries: hello@claimhawk.app
