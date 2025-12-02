@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "cudag"
-version = "0.1.0"
+version = "0.1.1"
 description = "CUDAG - ComputerUseDataAugmentedGeneration framework for building VLM training data generators"
 readme = "README.md"
 license = "MIT"
@@ -53,9 +53,6 @@ cudag = "cudag.cli.main:cli"
 
 [tool.hatch.build.targets.wheel]
 packages = ["src/cudag"]
-
-[tool.hatch.build.targets.wheel.force-include]
-"src/cudag/templates" = "cudag/templates"
 
 [tool.hatch.build.targets.sdist]
 include = [

@@ -43,6 +43,8 @@ from cudag.core import (
     BaseState,
     # Task
     BaseTask,
+    # Utils
+    check_script_invocation,
     BelongsToRel,
     BoolField,
     # Screen DSL - classes
@@ -134,7 +136,6 @@ from cudag.core import (
 # Prompts
 from cudag.prompts import (
     COMPUTER_USE_TOOL,
-    SYSTEM_PROMPT_COMPACT,
     CUA_SYSTEM_PROMPT,
     TOOL_ACTIONS,
     ToolCall,
@@ -253,6 +254,7 @@ __all__ = [
     "parse_tool_call",
     "validate_tool_call",
     "CUA_SYSTEM_PROMPT",
-    "SYSTEM_PROMPT_COMPACT",
     "get_system_prompt",
+    # Utils
+    "check_script_invocation",
 ]

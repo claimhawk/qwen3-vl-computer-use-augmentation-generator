@@ -131,6 +131,7 @@ from cudag.core.screen import (
 )
 from cudag.core.state import BaseState, ScrollState
 from cudag.core.task import BaseTask, TaskContext, TaskSample, TestCase
+from cudag.core.utils import check_script_invocation
 
 __all__ = [
     # Coordinates
@@ -269,4 +270,6 @@ __all__ = [
     "Specialty",
     "ClaimStatus",
     "Fee",
+    # Utils
+    "check_script_invocation",
 ]

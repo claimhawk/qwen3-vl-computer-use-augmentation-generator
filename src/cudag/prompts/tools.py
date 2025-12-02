@@ -192,6 +192,16 @@ class ToolCall:
         return cls(action="left_click", coordinate=coordinate)
 
     @classmethod
+    def double_click(cls, coordinate: tuple[int, int]) -> ToolCall:
+        """Create a double_click tool call."""
+        return cls(action="double_click", coordinate=coordinate)
+
+    @classmethod
+    def right_click(cls, coordinate: tuple[int, int]) -> ToolCall:
+        """Create a right_click tool call."""
+        return cls(action="right_click", coordinate=coordinate)
+
+    @classmethod
     def scroll(cls, coordinate: tuple[int, int], pixels: int) -> ToolCall:
         """Create a scroll tool call. Negative pixels = scroll up."""
         return cls(action="scroll", coordinate=coordinate, pixels=pixels)

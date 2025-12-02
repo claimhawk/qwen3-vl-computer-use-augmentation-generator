@@ -244,8 +244,8 @@ class BaseTask(ABC):
         self,
         image: Any,  # PIL.Image.Image
         ctx: TaskContext,
-        extension: str = "png",
-        quality: int = 95,
+        extension: str = "jpg",
+        quality: int = 85,
         prefix: str | None = None,
     ) -> Path:
         """Save a generated image to the output directory.
@@ -253,7 +253,7 @@ class BaseTask(ABC):
         Args:
             image: PIL Image to save
             ctx: Task context
-            extension: Image format (png, jpg)
+            extension: Image format (default: jpg)
             quality: JPEG quality (ignored for PNG)
             prefix: Optional prefix for filename (e.g., "eval" for eval images)
 

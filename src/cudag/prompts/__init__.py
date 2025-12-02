@@ -5,8 +5,8 @@
 """System prompts and tool definitions for computer use training."""
 
 from cudag.prompts.system import (
-    SYSTEM_PROMPT_COMPACT,
     CUA_SYSTEM_PROMPT,
+    SYSTEM_PROMPT,
     get_system_prompt,
 )
 from cudag.prompts.tools import (
@@ -26,6 +26,6 @@ __all__ = [
     "parse_tool_call",
     "validate_tool_call",
     "CUA_SYSTEM_PROMPT",
-    "SYSTEM_PROMPT_COMPACT",
+    "SYSTEM_PROMPT",
     "get_system_prompt",
 ]

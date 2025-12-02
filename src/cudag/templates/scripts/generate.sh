@@ -34,6 +34,9 @@ if [[ "$DRY_RUN" == "true" ]]; then
 fi
 
 # Run the dataset generation using uv run (uses pyproject.toml dependencies)
+# Set env var so generator.py knows it was called from this script
+export CUDAG_FROM_SCRIPT=1
+
 if [[ ${#EXTRA_ARGS[@]} -gt 0 ]]; then
     uv run python generator.py "${EXTRA_ARGS[@]}"
 else
