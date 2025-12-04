@@ -39,7 +39,7 @@ def run_generator(
     - Script invocation check (warning if not run via ./scripts/generate.sh)
     - Argument parsing (--config, --seed, plus custom args)
     - Config loading from YAML
-    - Dataset naming ({prefix}-{researcher}-{timestamp})
+    - Dataset naming ({prefix}--{researcher}--{timestamp})
     - Dataset building and test generation
 
     Args:
@@ -132,14 +132,15 @@ def run_generator(
     if config_modifier:
         config_modifier(config, args)
 
-    # Build dataset name: {prefix}-{researcher}-{timestamp}
+    # Build dataset name: {prefix}--{researcher}--{timestamp}
+    # Using "--" delimiter to disambiguate from hyphens in expert names
     researcher = get_researcher_name()
     timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
     name_parts = [config.name_prefix]
     if researcher:
         name_parts.append(researcher)
     name_parts.append(timestamp)
-    dataset_name = "-".join(name_parts)
+    dataset_name = "--".join(name_parts)
 
     config.output_dir = Path("datasets") / dataset_name
 

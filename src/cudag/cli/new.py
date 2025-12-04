@@ -326,7 +326,7 @@ def _write_generator(project_dir: Path, module_name: str) -> None:
             researcher = get_researcher_name()
             timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
             if researcher:
-                dataset_name = f"{{config.name_prefix}}-{{researcher}}-{{timestamp}}"
+                dataset_name = f"{{config.name_prefix}}--{{researcher}}--{{timestamp}}"
             else:
                 dataset_name = f"{{config.name_prefix}}_{{timestamp}}"
 
