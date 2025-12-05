@@ -22,6 +22,7 @@ from typing import TYPE_CHECKING, Any
 from cudag.prompts.tools import ToolCall, format_tool_call
 
 if TYPE_CHECKING:
+    from cudag.core.dataset import DatasetConfig
     from cudag.core.renderer import BaseRenderer
 
 
@@ -159,11 +160,13 @@ class BaseTask(ABC):
     task_type: str
     """Unique identifier for this task type (e.g., 'click-day', 'scroll-grid')."""
 
-    def __init__(self, config: dict[str, Any], renderer: BaseRenderer[Any]) -> None:
+    def __init__(
+        self, config: DatasetConfig | dict[str, Any], renderer: BaseRenderer[Any]
+    ) -> None:
         """Initialize the task.
 
         Args:
-            config: Task-specific configuration from generator.yaml
+            config: Task-specific configuration from generator.yaml (DatasetConfig or dict)
             renderer: Renderer instance for generating images
         """
         self.config = config

@@ -85,6 +85,8 @@ from cudag.core.models import (
     computed,
     date_field,
     decimal,
+    get_first_name,
+    get_last_name,
     has_many,
     has_one,
     integer,
@@ -261,6 +263,9 @@ __all__ = [
     "list_of",
     "computed",
     "years_since",
+    # Name generation functions
+    "get_first_name",
+    "get_last_name",
     # Relationship DSL - classes
     "Relationship",
     "HasManyRel",

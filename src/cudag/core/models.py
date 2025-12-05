@@ -68,6 +68,7 @@ FIRST_NAMES = [
 ]
 
 LAST_NAMES = [
+    # Train surnames (first ~90%)
     "Smith",
     "Johnson",
     "Williams",
@@ -99,7 +100,72 @@ LAST_NAMES = [
     "Lewis",
     "Robinson",
     "Walker",
+    "Young",
+    "Allen",
+    "King",
+    "Wright",
+    "Scott",
+    "Torres",
+    "Nguyen",
+    "Hill",
+    "Flores",
+    "Green",
+    "Adams",
+    "Nelson",
+    "Baker",
+    "Hall",
+    "Rivera",
+    # Test surnames (last ~10% - held out for evaluation)
+    "Campbell",
+    "Mitchell",
+    "Roberts",
+    "Carter",
+    "Phillips",
 ]
+
+# Index where test surnames start (for train/test split)
+_LAST_NAME_TEST_START = 46
+
+
+def get_last_name(
+    rng: random.Random,
+    augment: bool = False,
+    split: str = "train",
+) -> str:
+    """Get a last name with optional augmentation and train/test split.
+
+    Args:
+        rng: Random number generator
+        augment: If True, may add augmentation (Jr., III, etc.)
+        split: "train" uses first 90% of surnames, "test" uses held-out 10%
+
+    Returns:
+        Last name string, optionally augmented
+    """
+    if split == "test":
+        names = LAST_NAMES[_LAST_NAME_TEST_START:]
+    else:
+        names = LAST_NAMES[:_LAST_NAME_TEST_START]
+
+    name = rng.choice(names)
+
+    if augment and rng.random() < 0.1:
+        suffix = rng.choice(["Jr.", "Sr.", "II", "III", "IV"])
+        name = f"{name} {suffix}"
+
+    return name
+
+
+def get_first_name(rng: random.Random) -> str:
+    """Get a random first name.
+
+    Args:
+        rng: Random number generator
+
+    Returns:
+        First name string
+    """
+    return rng.choice(FIRST_NAMES)
 
 US_STATES = [
     "AL",
