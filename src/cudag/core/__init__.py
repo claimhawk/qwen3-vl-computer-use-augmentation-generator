@@ -53,6 +53,7 @@ from cudag.core.icon import (
 from cudag.core.dataset import DatasetBuilder, DatasetConfig
 from cudag.core.distribution import DistributionSampler
 from cudag.core.scroll_task import ScrollTaskBase, ScrollTaskConfig
+from cudag.core.iconlist_task import IconListTaskBase, make_tool_call
 from cudag.core.models import (
     # Classes
     Attachment,
@@ -236,6 +237,9 @@ __all__ = [
     # Scroll Tasks
     "ScrollTaskBase",
     "ScrollTaskConfig",
+    # IconList Tasks
+    "IconListTaskBase",
+    "make_tool_call",
     # Model DSL - classes
     "Model",
     "ModelGenerator",

@@ -18,8 +18,21 @@ Example:
         annotation=parsed,
         output_dir=Path("./projects"),
     )
+
+For runtime data-driven generation:
+    from cudag.annotation import AnnotationConfig
+
+    config = AnnotationConfig.load(Path("assets/annotations"))
+    for icon in config.get_labeled_icons("desktop"):
+        print(f"{icon.label} at {icon.absolute_center}")
 """
 
+from cudag.annotation.config import (
+    AnnotatedElement,
+    AnnotatedIcon,
+    AnnotatedTask,
+    AnnotationConfig,
+)
 from cudag.annotation.loader import (
     AnnotationLoader,
     ParsedAnnotation,
@@ -29,6 +42,12 @@ from cudag.annotation.loader import (
 from cudag.annotation.scaffold import scaffold_generator
 
 __all__ = [
+    # Runtime config (for data-driven generators)
+    "AnnotationConfig",
+    "AnnotatedElement",
+    "AnnotatedIcon",
+    "AnnotatedTask",
+    # Code generation (for scaffolding new generators)
     "AnnotationLoader",
     "ParsedAnnotation",
     "ParsedElement",
