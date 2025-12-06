@@ -14,9 +14,16 @@ Usage:
 """
 
 import json
+import multiprocessing
+import sys
+from concurrent.futures import ThreadPoolExecutor, as_completed
+from pathlib import Path
+
+import modal
 
 # System prompt injected during preprocessing (not stored in training data)
 # fmt: off
+# ruff: noqa: E501
 SYSTEM_PROMPT = """# Tools
 
 You may call one or more functions to assist with the user query.
@@ -70,10 +77,6 @@ Rules:
 - Do not output anything else outside those parts.
 - If finishing, use action=terminate in the tool call."""
 # fmt: on
-import sys
-from pathlib import Path
-
-import modal
 
 # =============================================================================
 # CENTRALIZED CONFIGURATION
@@ -82,7 +85,8 @@ import modal
 # Users can customize these by editing the YAML file.
 
 try:
-    from sdk.modal_compat import get_volume_name, get_base_vlm
+    from sdk.modal_compat import get_base_vlm, get_volume_name
+
     DEFAULT_VOLUME = get_volume_name("lora_training")
     BASE_MODEL = get_base_vlm()
 except ImportError:
@@ -169,8 +173,8 @@ def preprocess_dataset_impl(dataset_name: str):
         for item in all_files[:20]:
             print(f"   - {item.name} ({'dir' if item.is_dir() else 'file'})")
     else:
-        print(f"Directory does not exist!")
-        print(f"Available in datasets/:")
+        print("Directory does not exist!")
+        print("Available in datasets/:")
         datasets_dir = data_root / "datasets"
         if datasets_dir.exists():
             for item in datasets_dir.iterdir():
@@ -185,7 +189,7 @@ def preprocess_dataset_impl(dataset_name: str):
 
     def load_jsonl(path):
         data = []
-        with open(path, "r") as f:
+        with open(path) as f:
             for line in f:
                 data.append(json.loads(line))
         return data
@@ -194,13 +198,13 @@ def preprocess_dataset_impl(dataset_name: str):
     if train_files and (val_files or test_files):
         train_path = train_files[0]
         val_path = val_files[0] if val_files else test_files[0]
-        print(f"\nUsing existing dataset split:")
+        print("\nUsing existing dataset split:")
         print(f"   Train: {train_path.name}")
         print(f"   Val: {val_path.name}")
         train_data = load_jsonl(train_path)
         val_data = load_jsonl(val_path)
     elif data_files:
-        print(f"\nFound single data.jsonl, auto-splitting 90/10...")
+        print("\nFound single data.jsonl, auto-splitting 90/10...")
         all_data = load_jsonl(data_files[0])
         split_idx = int(len(all_data) * 0.9)
         train_data = all_data[:split_idx]
@@ -210,7 +214,7 @@ def preprocess_dataset_impl(dataset_name: str):
             f"Could not find train*.jsonl/val*.jsonl or data.jsonl in {dataset_path}"
         )
 
-    print(f"\nDataset size:")
+    print("\nDataset size:")
     print(f"   Train samples: {len(train_data)}")
     print(f"   Val samples: {len(val_data)}")
 
@@ -233,17 +237,17 @@ def preprocess_dataset_impl(dataset_name: str):
     for sample in train_data + val_data:
         unique_images.add(sample["image"])
 
+    total_samples = len(train_data) + len(val_data)
+    print(f"Found {len(unique_images)} unique images (from {total_samples} total)")
     print(
-        f"Found {len(unique_images)} unique images (from {len(train_data) + len(val_data)} total samples)"
-    )
-    print(
-        f"Reuse ratio: {(len(train_data) + len(val_data)) / max(len(unique_images), 1):.1f}x"
+        f"Reuse ratio: {total_samples / max(len(unique_images), 1):.1f}x"
     )
 
     image_cache = {}
 
-    print("\nProcessing unique images...")
-    for img_path in tqdm(sorted(unique_images), desc="Caching images"):
+    # Helper function for parallel image processing
+    def process_single_image(img_path: str) -> tuple[str, dict | None]:
+        """Process a single image and return (path, cached_data) or (path, None) on error."""
         img_path_str = str(img_path)
 
         # Handle nested paths - strip dataset name prefix if present
@@ -253,24 +257,49 @@ def preprocess_dataset_impl(dataset_name: str):
 
         full_path = dataset_path / img_path_str
         if not full_path.exists():
-            print(f"Warning: Image not found: {full_path}")
-            continue
+            return (img_path, None)
 
-        image = Image.open(full_path)
-        image_inputs, _ = process_vision_info(
-            [
+        try:
+            image = Image.open(full_path)
+            image_inputs, _ = process_vision_info(
+                [
+                    {
+                        "role": "user",
+                        "content": [{"type": "image", "image": f"file://{full_path}"}],
+                    }
+                ],
+                image_patch_size=16,
+            )
+
+            return (
+                img_path,
                 {
-                    "role": "user",
-                    "content": [{"type": "image", "image": f"file://{full_path}"}],
-                }
-            ],
-            image_patch_size=16,
-        )
+                    "pixel_values": image_inputs[0] if image_inputs else None,
+                    "image": image,
+                },
+            )
+        except Exception as e:
+            print(f"Warning: Failed to process {full_path}: {e}")
+            return (img_path, None)
 
-        image_cache[img_path] = {
-            "pixel_values": image_inputs[0] if image_inputs else None,
-            "image": image,
+    # Process images in parallel using ThreadPoolExecutor
+    print("\nProcessing unique images in parallel...")
+    num_workers = min(8, multiprocessing.cpu_count())
+    print(f"Using {num_workers} workers")
+
+    sorted_images = sorted(unique_images)
+    with ThreadPoolExecutor(max_workers=num_workers) as executor:
+        future_to_path = {
+            executor.submit(process_single_image, p): p for p in sorted_images
         }
+        for future in tqdm(
+            as_completed(future_to_path),
+            total=len(sorted_images),
+            desc="Caching images",
+        ):
+            img_path, cached_data = future.result()
+            if cached_data is not None:
+                image_cache[img_path] = cached_data
 
     print(f"Cached {len(image_cache)} images")
 
@@ -347,24 +376,24 @@ def preprocess_dataset_impl(dataset_name: str):
         )
 
         # Create labels: Only train on assistant responses
-        IGNORE_INDEX = -100
-        labels = torch.full_like(input_ids, IGNORE_INDEX)
+        ignore_index = -100
+        labels = torch.full_like(input_ids, ignore_index)
 
         input_ids_list = input_ids.tolist()
-        L = len(input_ids_list)
+        seq_len = len(input_ids_list)
         pos = 0
 
-        while pos < L:
+        while pos < seq_len:
             # Look for <|im_start|>assistant (token ID 77091)
             if input_ids_list[pos] == 77091:
                 ans_start = pos + 2
                 ans_end = ans_start
 
                 # Find <|im_end|> (token ID 151645)
-                while ans_end < L and input_ids_list[ans_end] != 151645:
+                while ans_end < seq_len and input_ids_list[ans_end] != 151645:
                     ans_end += 1
 
-                if ans_end < L:
+                if ans_end < seq_len:
                     labels[ans_start : ans_end + 2] = input_ids[ans_start : ans_end + 2]
                     pos = ans_end
             pos += 1
@@ -381,82 +410,65 @@ def preprocess_dataset_impl(dataset_name: str):
 
         return result
 
-    # Process training data
-    print("Processing training data...")
-    train_processed = []
+    # Helper to process and save a single sample
+    def process_and_save_sample(
+        args: tuple[int, dict, Path],
+    ) -> tuple[int, str | None, str | None]:
+        """Process a single sample and save to disk. Returns (idx, path, error)."""
+        idx, sample, output_dir = args
+        try:
+            processed = prepare_sample(sample, image_cache)
+
+            processed_cpu = {
+                "input_ids": processed["input_ids"].cpu(),
+                "attention_mask": processed["attention_mask"].cpu(),
+                "labels": processed["labels"].cpu(),
+            }
+            if "pixel_values" in processed:
+                processed_cpu["pixel_values"] = processed["pixel_values"].cpu()
+                processed_cpu["image_grid_thw"] = processed["image_grid_thw"].cpu()
+
+            sample_path = output_dir / f"sample_{idx:06d}.pt"
+            torch.save(processed_cpu, sample_path)
+            return (idx, str(sample_path), None)
+        except Exception as e:
+            return (idx, None, str(e))
+
+    # Process training data in parallel
+    print("Processing training data in parallel...")
     train_output_dir = preprocessed_path / "train"
     train_output_dir.mkdir(parents=True, exist_ok=True)
 
-    BATCH_SIZE = 8
-    batch_buffer = []
-    batch_indices = []
+    train_args = [(i, sample, train_output_dir) for i, sample in enumerate(train_data)]
+    train_processed = []
 
-    for i, sample in enumerate(tqdm(train_data, desc="Train")):
-        try:
-            processed = prepare_sample(sample, image_cache)
+    with ThreadPoolExecutor(max_workers=num_workers) as executor:
+        futures = {executor.submit(process_and_save_sample, arg): arg[0] for arg in train_args}
+        for future in tqdm(as_completed(futures), total=len(futures), desc="Train"):
+            idx, path, error = future.result()
+            if error:
+                print(f"\nError processing train sample {idx}: {error}")
+                raise RuntimeError(f"Failed to process sample {idx}: {error}")
+            if path:
+                train_processed.append(path)
 
-            processed_cpu = {
-                "input_ids": processed["input_ids"].cpu(),
-                "attention_mask": processed["attention_mask"].cpu(),
-                "labels": processed["labels"].cpu(),
-            }
-            if "pixel_values" in processed:
-                processed_cpu["pixel_values"] = processed["pixel_values"].cpu()
-                processed_cpu["image_grid_thw"] = processed["image_grid_thw"].cpu()
-
-            batch_buffer.append(processed_cpu)
-            batch_indices.append(i)
-
-            if len(batch_buffer) >= BATCH_SIZE or i == len(train_data) - 1:
-                for batch_idx, batch_sample in zip(batch_indices, batch_buffer):
-                    sample_path = train_output_dir / f"sample_{batch_idx:06d}.pt"
-                    torch.save(batch_sample, sample_path)
-                    train_processed.append(str(sample_path))
-
-                batch_buffer = []
-                batch_indices = []
-
-        except Exception as e:
-            print(f"\nError processing train sample {i}: {e}")
-            raise
-
-    # Process validation data
-    print("\nProcessing validation data...")
-    val_processed = []
+    # Process validation data in parallel
+    print("\nProcessing validation data in parallel...")
     val_output_dir = preprocessed_path / "val"
     val_output_dir.mkdir(parents=True, exist_ok=True)
 
-    batch_buffer = []
-    batch_indices = []
+    val_args = [(i, sample, val_output_dir) for i, sample in enumerate(val_data)]
+    val_processed = []
 
-    for i, sample in enumerate(tqdm(val_data, desc="Val")):
-        try:
-            processed = prepare_sample(sample, image_cache)
-
-            processed_cpu = {
-                "input_ids": processed["input_ids"].cpu(),
-                "attention_mask": processed["attention_mask"].cpu(),
-                "labels": processed["labels"].cpu(),
-            }
-            if "pixel_values" in processed:
-                processed_cpu["pixel_values"] = processed["pixel_values"].cpu()
-                processed_cpu["image_grid_thw"] = processed["image_grid_thw"].cpu()
-
-            batch_buffer.append(processed_cpu)
-            batch_indices.append(i)
-
-            if len(batch_buffer) >= BATCH_SIZE or i == len(val_data) - 1:
-                for batch_idx, batch_sample in zip(batch_indices, batch_buffer):
-                    sample_path = val_output_dir / f"sample_{batch_idx:06d}.pt"
-                    torch.save(batch_sample, sample_path)
-                    val_processed.append(str(sample_path))
-
-                batch_buffer = []
-                batch_indices = []
-
-        except Exception as e:
-            print(f"\nError processing val sample {i}: {e}")
-            raise
+    with ThreadPoolExecutor(max_workers=num_workers) as executor:
+        futures = {executor.submit(process_and_save_sample, arg): arg[0] for arg in val_args}
+        for future in tqdm(as_completed(futures), total=len(futures), desc="Val"):
+            idx, path, error = future.result()
+            if error:
+                print(f"\nError processing val sample {idx}: {error}")
+                raise RuntimeError(f"Failed to process sample {idx}: {error}")
+            if path:
+                val_processed.append(path)
 
     # Save metadata
     metadata = {
@@ -470,7 +482,7 @@ def preprocess_dataset_impl(dataset_name: str):
     with open(metadata_path, "w") as f:
         json.dump(metadata, f, indent=2)
 
-    print(f"\nPreprocessing complete!")
+    print("\nPreprocessing complete!")
     print(f"   Train samples: {len(train_processed)}")
     print(f"   Val samples: {len(val_processed)}")
 
