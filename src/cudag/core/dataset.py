@@ -497,32 +497,61 @@ class DatasetBuilder:
         if not task_types:
             return test_dir
 
-        # Keep generating until we have enough tests
-        task_idx = 0
-        while len(test_cases) < self.config.test_count:
-            task_type = task_types[task_idx % len(task_types)]
-            task = self.tasks[task_type]
+        # Use explicit test_distribution if provided, otherwise round-robin
+        if self.config.test_distribution:
+            # Generate tests according to distribution
+            tests_per_type: dict[str, int] = {}
+            for task_type in task_types:
+                tests_per_type[task_type] = self.config.test_distribution.get(task_type, 0)
 
-            # Pass test_dir as output_dir so images save to test/images/
-            ctx = TaskContext(
-                rng=self.rng,
-                index=index,
-                output_dir=test_dir,
-                config=task.config,
-                dataset_name=self.config.name_prefix,
-            )
+            for task_type, target_count in tests_per_type.items():
+                if target_count <= 0 or task_type not in self.tasks:
+                    continue
+                task = self.tasks[task_type]
+                generated = 0
 
-            # Generate tests (can be 1:N from one image)
-            tests = task.generate_tests(ctx)
-            for test_case in tests:
-                if len(test_cases) >= self.config.test_count:
-                    break
-                record = self._test_to_record(test_case, test_dir)
-                test_cases.append(record)
-                raw_test_cases.append(test_case)
+                while generated < target_count:
+                    ctx = TaskContext(
+                        rng=self.rng,
+                        index=index,
+                        output_dir=test_dir,
+                        config=task.config,
+                        dataset_name=self.config.name_prefix,
+                    )
+                    tests = task.generate_tests(ctx)
+                    for test_case in tests:
+                        if generated >= target_count:
+                            break
+                        record = self._test_to_record(test_case, test_dir)
+                        test_cases.append(record)
+                        raw_test_cases.append(test_case)
+                        generated += 1
+                    index += 1
+        else:
+            # Round-robin fallback when no distribution specified
+            task_idx = 0
+            while len(test_cases) < self.config.test_count:
+                task_type = task_types[task_idx % len(task_types)]
+                task = self.tasks[task_type]
 
-            index += 1
-            task_idx += 1
+                ctx = TaskContext(
+                    rng=self.rng,
+                    index=index,
+                    output_dir=test_dir,
+                    config=task.config,
+                    dataset_name=self.config.name_prefix,
+                )
+
+                tests = task.generate_tests(ctx)
+                for test_case in tests:
+                    if len(test_cases) >= self.config.test_count:
+                        break
+                    record = self._test_to_record(test_case, test_dir)
+                    test_cases.append(record)
+                    raw_test_cases.append(test_case)
+
+                index += 1
+                task_idx += 1
 
         # Generate annotations - stratified by task type
         annotated_count = 0
