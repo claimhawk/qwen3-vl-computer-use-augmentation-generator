@@ -147,6 +147,68 @@ class ParsedAnnotation:
     tasks: list[ParsedTask]
     image_path: str = ""
 
+    def to_dict(self) -> dict[str, Any]:
+        """Convert back to annotation.json format."""
+        return {
+            "screenName": self.screen_name,
+            "imageSize": list(self.image_size),
+            "imagePath": self.image_path,
+            "elements": [self._element_to_dict(el) for el in self.elements],
+            "tasks": [self._task_to_dict(t) for t in self.tasks],
+        }
+
+    def _element_to_dict(self, el: ParsedElement) -> dict[str, Any]:
+        """Convert element back to dict format."""
+        result: dict[str, Any] = {
+            "id": el.id,
+            "type": el.element_type,
+            "bbox": {
+                "x": el.bounds[0],
+                "y": el.bounds[1],
+                "width": el.bounds[2],
+                "height": el.bounds[3],
+            },
+        }
+        if el.label:
+            result["text"] = el.label
+        if el.rows:
+            result["rows"] = el.rows
+        if el.cols:
+            result["cols"] = el.cols
+        if el.row_heights:
+            result["rowHeights"] = el.row_heights
+        if el.col_widths:
+            result["colWidths"] = el.col_widths
+        if el.mask_color:
+            result["maskColor"] = el.mask_color
+        if el.text_align:
+            result["textAlign"] = el.text_align
+        return result
+
+    def _task_to_dict(self, t: ParsedTask) -> dict[str, Any]:
+        """Convert task back to dict format."""
+        result: dict[str, Any] = {
+            "id": t.id,
+            "prompt": t.prompt,
+            "action": t.action,
+        }
+        if t.target_element_id:
+            result["targetElementId"] = t.target_element_id
+        if t.task_type:
+            result["taskType"] = t.task_type
+        if t.prior_states:
+            result["priorStates"] = t.prior_states
+        # Add action params
+        if t.action == "type" and "text" in t.action_params:
+            result["text"] = t.action_params["text"]
+        elif t.action == "key" and "keys" in t.action_params:
+            result["keys"] = t.action_params["keys"]
+        elif t.action == "scroll" and "pixels" in t.action_params:
+            result["scrollPixels"] = t.action_params["pixels"]
+        elif t.action == "wait" and "ms" in t.action_params:
+            result["waitMs"] = t.action_params["ms"]
+        return result
+
 
 class AnnotationLoader:
     """Load and parse annotation data from various sources."""

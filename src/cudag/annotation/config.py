@@ -88,6 +88,22 @@ class AnnotatedElement:
     layout: str = ""
     """Layout style: 'stacked', 'sparse', 'random', or empty for default."""
 
+    # Grid properties
+    rows: int = 0
+    """Number of rows for grid elements."""
+
+    cols: int = 0
+    """Number of columns for grid elements."""
+
+    col_widths: list[float] = field(default_factory=list)
+    """Relative column widths (should sum to 1.0)."""
+
+    row_heights: list[float] = field(default_factory=list)
+    """Relative row heights (should sum to 1.0)."""
+
+    selectable_cell: bool = False
+    """If True, individual grid cells are selectable."""
+
     # Tolerance from annotation (in pixels)
     tolerance_x: int = 0
     tolerance_y: int = 0
@@ -250,6 +266,11 @@ class AnnotationConfig:
             vary_n=el.get("varyN", False),
             random_order=el.get("randomOrder", False),
             layout=el.get("layout", ""),
+            rows=el.get("rows", 0),
+            cols=el.get("cols", 0),
+            col_widths=el.get("colWidths", []),
+            row_heights=el.get("rowHeights", []),
+            selectable_cell=el.get("selectableCell", False),
             tolerance_x=el.get("toleranceX", 0),
             tolerance_y=el.get("toleranceY", 0),
             mask_color=el.get("maskColor"),

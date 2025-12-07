@@ -2,7 +2,11 @@
 # CONFIDENTIAL AND PROPRIETARY. Unauthorized use, copying, or distribution
 # is strictly prohibited. For licensing inquiries: hello@claimhawk.app
 
-"""Code generation utilities for scaffolding CUDAG projects."""
+"""Code generation utilities for scaffolding CUDAG projects.
+
+Generates annotation-driven code that loads annotation.json at runtime
+via AnnotationConfig, enabling UI updates without regenerating code.
+"""
 
 from __future__ import annotations
 
@@ -13,56 +17,226 @@ COPYRIGHT_HEADER = '''# Auto-generated from annotation - feel free to modify.
 
 
 def generate_screen_py(annotation: ParsedAnnotation) -> str:
-    """Generate screen.py from annotation."""
-    class_name = _to_pascal_case(annotation.screen_name) + "Screen"
+    """Generate screen.py with runtime annotation loading."""
+    # Identify element types present
+    has_grid = any(el.region_type == "grid" for el in annotation.elements)
+    has_buttons = any(el.region_type == "button" for el in annotation.elements)
+    has_text = any(el.element_type == "text" for el in annotation.elements)
 
-    regions = []
-    for el in annotation.elements:
-        region_def = _generate_region_def(el)
-        regions.append(f"    {el.python_name} = {region_def}")
+    # Build helper functions based on element types
+    helpers: list[str] = []
 
-    regions_str = "\n".join(regions) if regions else "    pass"
+    if has_grid:
+        helpers.append(_generate_grid_helpers())
+
+    if has_buttons:
+        helpers.append(_generate_button_helpers())
+
+    if has_text:
+        helpers.append(_generate_text_helpers())
+
+    # Always include image path helper
+    helpers.append(_generate_image_helpers())
+
+    helpers_str = "\n\n".join(helpers)
 
     return f'''{COPYRIGHT_HEADER}
-"""Screen definition for {annotation.screen_name}."""
+"""Screen definition for {annotation.screen_name}.
 
-from cudag import Screen, button, region, grid, dropdown, scrollable
+All UI data comes from the annotator (assets/annotations/annotation.json).
+The generator only handles business logic (state randomization, valid click targets).
+
+Data from annotation:
+- Element positions, bboxes, tolerances
+- Task prompts/templates
+- Masked base image
+
+Coordinate scaling:
+- Annotation was made on {annotation.image_size} image
+- Generator may produce different size images
+- All coordinates are scaled at load time
+"""
+
+from __future__ import annotations
+
+from pathlib import Path
+
+from cudag.annotation import AnnotatedElement, AnnotatedTask, AnnotationConfig
 
 
-class {class_name}(Screen):
-    """Screen definition auto-generated from annotation."""
+# -----------------------------------------------------------------------------
+# Load Annotation (Single Source of Truth)
+# -----------------------------------------------------------------------------
 
-    name = "{annotation.screen_name}"
-    base_image = "assets/blanks/base.png"
-    size = {annotation.image_size}
+_ANNOTATIONS_DIR = Path(__file__).parent / "assets" / "annotations"
 
-{regions_str}
+if not _ANNOTATIONS_DIR.exists():
+    raise FileNotFoundError(f"Annotations directory not found: {{_ANNOTATIONS_DIR}}")
+
+ANNOTATION_CONFIG = AnnotationConfig.load(_ANNOTATIONS_DIR)
+
+
+# -----------------------------------------------------------------------------
+# Coordinate Scaling
+# -----------------------------------------------------------------------------
+
+_ANNOTATION_SIZE = ANNOTATION_CONFIG.image_size  # {annotation.image_size}
+
+# Output size - override these if generating different size images
+IMAGE_WIDTH, IMAGE_HEIGHT = _ANNOTATION_SIZE
+_GENERATOR_SIZE = (IMAGE_WIDTH, IMAGE_HEIGHT)
+
+_SCALE_X = _GENERATOR_SIZE[0] / _ANNOTATION_SIZE[0]
+_SCALE_Y = _GENERATOR_SIZE[1] / _ANNOTATION_SIZE[1]
+
+
+def scale_coord(x: int | float, y: int | float) -> tuple[int, int]:
+    """Scale coordinates from annotation space to generator space."""
+    return (int(x * _SCALE_X), int(y * _SCALE_Y))
+
+
+def scale_bbox(bbox: tuple[int, int, int, int]) -> tuple[int, int, int, int]:
+    """Scale bbox (x, y, width, height) from annotation to generator space."""
+    x, y, w, h = bbox
+    return (int(x * _SCALE_X), int(y * _SCALE_Y), int(w * _SCALE_X), int(h * _SCALE_Y))
+
+
+def scale_tolerance(tol_x: int, tol_y: int) -> tuple[int, int]:
+    """Scale tolerance values from annotation to generator space."""
+    return (int(tol_x * _SCALE_X), int(tol_y * _SCALE_Y))
+
+
+{helpers_str}
 '''
 
 
-def _generate_region_def(el: ParsedElement) -> str:
-    """Generate a region definition for an element."""
-    bounds = el.bounds
-    bounds_tuple = f"({bounds[0]}, {bounds[1]}, {bounds[2]}, {bounds[3]})"
+def _generate_grid_helpers() -> str:
+    """Generate helper functions for grid elements."""
+    return '''# -----------------------------------------------------------------------------
+# Grid Element Accessors
+# -----------------------------------------------------------------------------
 
-    if el.region_type == "button":
-        label = f'"{el.label}"' if el.label else '""'
-        return f'button({bounds_tuple}, label={label})'
+def get_grid_element(label: str = "grid") -> AnnotatedElement:
+    """Get a grid element by label."""
+    el = ANNOTATION_CONFIG.get_element_by_label(label)
+    if el is None:
+        raise ValueError(f"Grid element '{label}' not found in annotation")
+    return el
 
-    elif el.region_type == "grid":
-        rows = el.rows or 1
-        cols = el.cols or 1
-        return f"grid({bounds_tuple}, rows={rows}, cols={cols})"
 
-    elif el.region_type == "dropdown":
-        rows = el.rows or 1
-        return f"dropdown({bounds_tuple}, items=[], item_height={bounds[3] // rows})"
+def get_grid_bbox(label: str = "grid") -> tuple[int, int, int, int]:
+    """Get scaled grid bounding box."""
+    return scale_bbox(get_grid_element(label).bbox)
 
-    elif el.region_type == "scrollable":
-        return f"scrollable({bounds_tuple}, step=100)"
 
-    else:
-        return f"region({bounds_tuple})"
+def get_grid_dimensions(label: str = "grid") -> tuple[int, int]:
+    """Get grid rows and cols from annotation."""
+    el = get_grid_element(label)
+    return (el.rows, el.cols)
+
+
+def get_grid_tolerance(label: str = "grid") -> tuple[int, int]:
+    """Get scaled grid cell tolerance."""
+    el = get_grid_element(label)
+    return scale_tolerance(el.tolerance_x, el.tolerance_y)'''
+
+
+def _generate_button_helpers() -> str:
+    """Generate helper functions for button elements."""
+    return '''# -----------------------------------------------------------------------------
+# Button Element Accessors
+# -----------------------------------------------------------------------------
+
+def get_button_element(name: str) -> AnnotatedElement:
+    """Get a button element by name."""
+    el = ANNOTATION_CONFIG.get_element_by_label(name)
+    if el is None:
+        raise ValueError(f"Button element '{name}' not found in annotation")
+    return el
+
+
+def get_button_center(name: str) -> tuple[int, int]:
+    """Get scaled button center coordinates."""
+    el = get_button_element(name)
+    return scale_coord(el.center[0], el.center[1])
+
+
+def get_button_tolerance(name: str) -> tuple[int, int]:
+    """Get scaled button tolerance."""
+    el = get_button_element(name)
+    return scale_tolerance(el.tolerance_x, el.tolerance_y)
+
+
+def get_all_buttons() -> list[AnnotatedElement]:
+    """Get all button elements from annotation."""
+    return [el for el in ANNOTATION_CONFIG.elements if el.element_type == "button"]
+
+
+def get_button_task(button_name: str) -> AnnotatedTask:
+    """Get the task for a specific button."""
+    el = get_button_element(button_name)
+    tasks = ANNOTATION_CONFIG.get_tasks_for_element(el.id)
+    if not tasks:
+        raise ValueError(f"No task found for button '{button_name}'")
+    return tasks[0]
+
+
+def get_all_button_tasks() -> list[tuple[AnnotatedElement, AnnotatedTask]]:
+    """Get all button elements with their tasks."""
+    result: list[tuple[AnnotatedElement, AnnotatedTask]] = []
+    for el in get_all_buttons():
+        tasks = ANNOTATION_CONFIG.get_tasks_for_element(el.id)
+        if tasks:
+            result.append((el, tasks[0]))
+    return result'''
+
+
+def _generate_text_helpers() -> str:
+    """Generate helper functions for text elements."""
+    return '''# -----------------------------------------------------------------------------
+# Text Element Accessors
+# -----------------------------------------------------------------------------
+
+def get_text_element(name: str) -> AnnotatedElement:
+    """Get a text element by name."""
+    el = ANNOTATION_CONFIG.get_element_by_label(name)
+    if el is None:
+        raise ValueError(f"Text element '{name}' not found in annotation")
+    return el
+
+
+def get_text_bbox(name: str) -> tuple[int, int, int, int]:
+    """Get scaled text element bounding box."""
+    el = get_text_element(name)
+    return scale_bbox(el.bbox)
+
+
+def get_text_center(name: str) -> tuple[int, int]:
+    """Get scaled text element center position."""
+    el = get_text_element(name)
+    return scale_coord(el.center[0], el.center[1])'''
+
+
+def _generate_image_helpers() -> str:
+    """Generate helper functions for image paths."""
+    return '''# -----------------------------------------------------------------------------
+# Image Paths
+# -----------------------------------------------------------------------------
+
+def get_masked_image_path() -> Path:
+    """Get path to annotator's masked image."""
+    path = ANNOTATION_CONFIG.masked_image_path
+    if path is None or not path.exists():
+        raise FileNotFoundError("masked.png not found in annotations")
+    return path
+
+
+def get_original_image_path() -> Path:
+    """Get path to original screenshot."""
+    path = ANNOTATION_CONFIG.original_image_path
+    if path is None or not path.exists():
+        raise FileNotFoundError("original.png not found in annotations")
+    return path'''
 
 
 def generate_state_py(annotation: ParsedAnnotation) -> str:
@@ -130,7 +304,7 @@ def _extract_state_fields(annotation: ParsedAnnotation) -> list[str]:
 
 
 def generate_renderer_py(annotation: ParsedAnnotation) -> str:
-    """Generate renderer.py from annotation."""
+    """Generate renderer.py using masked.png from annotations."""
     screen_class = _to_pascal_case(annotation.screen_name) + "Screen"
     state_class = _to_pascal_case(annotation.screen_name) + "State"
 
@@ -143,21 +317,26 @@ from typing import Any
 from PIL import Image
 
 from cudag import BaseRenderer
-from screen import {screen_class}
+from screen import get_masked_image_path, IMAGE_WIDTH, IMAGE_HEIGHT
 from state import {state_class}
 
 
 class {screen_class}Renderer(BaseRenderer[{state_class}]):
     """Renderer for {annotation.screen_name} screen.
 
-    Auto-generated from annotation. Customize the render() method
-    to add dynamic content based on state.
+    Uses masked.png from annotations as base image.
+    Customize the render() method to add dynamic content based on state.
     """
 
     def __init__(self) -> None:
         super().__init__()
-        self.screen = {screen_class}()
-        self.base_image = Image.open(Path(__file__).parent / self.screen.base_image)
+        masked_path = get_masked_image_path()
+        self._base_image = Image.open(masked_path)
+        # Resize if generator uses different size than annotation
+        if self._base_image.size != (IMAGE_WIDTH, IMAGE_HEIGHT):
+            self._base_image = self._base_image.resize(
+                (IMAGE_WIDTH, IMAGE_HEIGHT), Image.Resampling.LANCZOS
+            )
 
     def render(self, state: {state_class}) -> tuple[Image.Image, dict[str, Any]]:
         """Render the screen with the given state.
@@ -169,17 +348,16 @@ class {screen_class}Renderer(BaseRenderer[{state_class}]):
             Tuple of (rendered_image, metadata_dict)
         """
         # Start with base image
-        image = self.base_image.copy()
+        image = self._base_image.copy()
 
         # TODO: Add dynamic rendering based on state
         # Example:
-        # from cudag import draw_centered_text, load_font
-        # font = load_font(size=12)
+        # from PIL import ImageDraw
         # draw = ImageDraw.Draw(image)
-        # draw.text((x, y), state.some_text, font=font, fill="black")
+        # draw.text((x, y), state.some_text, font=font, fill="black", anchor="mm")
 
         metadata = {{
-            "screen_name": self.screen.name,
+            "screen_name": "{annotation.screen_name}",
             "image_size": image.size,
         }}
 
@@ -210,7 +388,6 @@ from pathlib import Path
 
 from cudag import DatasetBuilder, DatasetConfig, run_generator, check_script_invocation
 
-from screen import {screen_class}
 from state import {state_class}
 from renderer import {renderer_class}
 {task_imports_str}
@@ -250,8 +427,7 @@ if __name__ == "__main__":
 
 
 def generate_task_py(task: ParsedTask, annotation: ParsedAnnotation) -> str:
-    """Generate a task file from a parsed task."""
-    screen_class = _to_pascal_case(annotation.screen_name) + "Screen"
+    """Generate a task file using screen helpers for coordinates."""
     state_class = _to_pascal_case(annotation.screen_name) + "State"
 
     # Find target element
@@ -262,7 +438,31 @@ def generate_task_py(task: ParsedTask, annotation: ParsedAnnotation) -> str:
                 target_el = el
                 break
 
-    region_name = target_el.python_name if target_el else "# TODO: specify target region"
+    # Determine which helper to use based on element type
+    if target_el:
+        if target_el.region_type == "button":
+            coord_code = f'pixel_coords = get_button_center("{target_el.label}")'
+            tolerance_code = f'tolerance = get_button_tolerance("{target_el.label}")'
+            imports = "get_button_center, get_button_tolerance"
+        elif target_el.region_type == "grid":
+            coord_code = '''# Grid element - coordinates depend on which cell
+        grid_bbox = get_grid_bbox()
+        # TODO: Calculate cell coordinates based on state
+        pixel_coords = (grid_bbox[0] + grid_bbox[2] // 2, grid_bbox[1] + grid_bbox[3] // 2)'''
+            tolerance_code = 'tolerance = get_grid_tolerance()'
+            imports = "get_grid_bbox, get_grid_tolerance"
+        else:
+            coord_code = f'''# Get element center
+        el = ANNOTATION_CONFIG.get_element_by_label("{target_el.label}")
+        pixel_coords = scale_coord(el.center[0], el.center[1])'''
+            tolerance_code = f'''el = ANNOTATION_CONFIG.get_element_by_label("{target_el.label}")
+        tolerance = scale_tolerance(el.tolerance_x, el.tolerance_y)'''
+            imports = "scale_coord, scale_tolerance, ANNOTATION_CONFIG"
+    else:
+        coord_code = "pixel_coords = (0, 0)  # TODO: specify target coordinates"
+        tolerance_code = "tolerance = (50, 50)  # TODO: calculate from element size"
+        imports = "scale_coord"
+
     tool_call = _generate_tool_call(task)
 
     return f'''{COPYRIGHT_HEADER}
@@ -273,7 +473,7 @@ from typing import Any
 
 from cudag import BaseTask, TaskContext, TaskSample, TestCase, ToolCall, normalize_coord
 
-from screen import {screen_class}
+from screen import {imports}, IMAGE_WIDTH, IMAGE_HEIGHT
 from state import {state_class}
 
 
@@ -287,11 +487,9 @@ class {task.class_name}(BaseTask):
         state = {state_class}.generate(ctx.rng)
         image, metadata = self.renderer.render(state)
 
-        # Get target coordinates
-        screen = {screen_class}()
-        target = screen.{region_name}
-        pixel_coords = target.get_action_point()
-        normalized = normalize_coord(pixel_coords, image.size)
+        # Get target coordinates from annotation
+        {coord_code}
+        normalized = normalize_coord(pixel_coords, (IMAGE_WIDTH, IMAGE_HEIGHT))
 
         image_path = self.save_image(image, ctx)
 
@@ -311,12 +509,16 @@ class {task.class_name}(BaseTask):
     def generate_test(self, ctx: TaskContext) -> TestCase:
         """Generate a test case."""
         sample = self.generate_sample(ctx)
+
+        # Get tolerance from annotation
+        {tolerance_code}
+
         return TestCase(
             test_id=f"test_{{sample.id}}",
             screenshot=sample.image_path,
             prompt=sample.human_prompt,
             expected_action=sample.tool_call.to_dict(),
-            tolerance=(50, 50),  # TODO: Calculate from element size
+            tolerance=tolerance,
             metadata=sample.metadata,
             pixel_coords=sample.pixel_coords,
         )
@@ -378,7 +580,7 @@ __all__ = [
 
 
 def generate_config_yaml(annotation: ParsedAnnotation) -> str:
-    """Generate config/dataset.yaml."""
+    """Generate config/dataset.yaml with image output settings."""
     task_counts = "\n".join(
         f"  {task.task_type}: 1000" for task in annotation.tasks
     ) if annotation.tasks else "  # No tasks defined"
@@ -390,6 +592,12 @@ dataset:
   name: {annotation.screen_name}
   version: "1.0.0"
   description: "Training data for {annotation.screen_name}"
+
+# Image output settings
+# Defaults to annotation size - override to generate different size images
+image:
+  width: {annotation.image_size[0]}
+  height: {annotation.image_size[1]}
 
 generation:
   seed: 42

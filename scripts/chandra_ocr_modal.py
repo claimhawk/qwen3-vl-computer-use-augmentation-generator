@@ -259,48 +259,95 @@ def batch_ocr(
 
 
 # =============================================================================
-# WEB ENDPOINT (for deployment)
+# WEB ENDPOINT (for deployment) - Uses class for model caching
 # =============================================================================
 
 
-@app.function(
+@app.cls(
     image=image,
     gpu="A100:1",
     timeout=300,
     secrets=[modal.Secret.from_name("huggingface-secret")],
+    container_idle_timeout=300,  # Keep container alive for 5 minutes
 )
-@modal.fastapi_endpoint(method="POST")
-def ocr_endpoint(request: dict) -> dict:
-    """
-    Web endpoint for OCR inference.
+class ChandraOCR:
+    """Chandra OCR inference class with model caching."""
 
-    POST body:
-        {
-            "image_base64": "<base64 encoded image>",
-            "prompt_type": "ocr_layout",  # optional
-            "output_format": "markdown"   # optional
+    @modal.enter()
+    def load_model(self):
+        """Load model once when container starts."""
+        print(f"\n{'='*80}")
+        print("Loading Chandra OCR Model (cached for container lifetime)")
+        print(f"Model: {CHANDRA_MODEL}")
+        print(f"{'='*80}\n")
+
+        from chandra.model import InferenceManager
+
+        self.manager = InferenceManager(method="hf")
+        print("Model loaded and cached!")
+
+    @modal.fastapi_endpoint(method="POST")
+    def ocr_endpoint(self, request: dict) -> dict:
+        """
+        Web endpoint for OCR inference.
+
+        POST body:
+            {
+                "image_base64": "<base64 encoded image>",
+                "prompt_type": "ocr_layout",  # optional
+                "output_format": "markdown"   # optional
+            }
+
+        Returns:
+            {
+                "text": "<extracted text>",
+                "format": "markdown",
+                "prompt_type": "ocr_layout",
+                "image_size": [width, height]
+            }
+        """
+        import base64
+        from io import BytesIO
+
+        from chandra.model.schema import BatchInputItem
+        from PIL import Image
+
+        image_base64 = request.get("image_base64")
+        if not image_base64:
+            return {"error": "image_base64 is required"}
+
+        prompt_type = request.get("prompt_type", "ocr_layout")
+        output_format = request.get("output_format", "markdown")
+
+        # Decode image
+        image_data = base64.b64decode(image_base64)
+        pil_image = Image.open(BytesIO(image_data)).convert("RGB")
+
+        # Run OCR using cached model
+        batch = [BatchInputItem(image=pil_image, prompt_type=prompt_type)]
+        results = self.manager.generate(batch)
+        result = results[0]
+
+        # Extract output based on format
+        output: dict = {
+            "prompt_type": prompt_type,
+            "image_size": pil_image.size,
         }
 
-    Returns:
-        {
-            "text": "<extracted text>",
-            "format": "markdown",
-            "prompt_type": "ocr_layout",
-            "image_size": [width, height]
-        }
-    """
-    image_base64 = request.get("image_base64")
-    if not image_base64:
-        return {"error": "image_base64 is required"}
+        if output_format == "markdown":
+            output["text"] = result.markdown or ""
+            output["format"] = "markdown"
+        elif output_format == "json":
+            output["text"] = (result.json if hasattr(result, "json") else result.markdown) or ""
+            output["format"] = "json"
+        elif output_format == "html":
+            output["text"] = (result.html if hasattr(result, "html") else result.markdown) or ""
+            output["format"] = "html"
+        else:
+            output["text"] = result.markdown or ""
+            output["format"] = "markdown"
 
-    prompt_type = request.get("prompt_type", "ocr_layout")
-    output_format = request.get("output_format", "markdown")
-
-    return run_ocr.local(
-        image_base64=image_base64,
-        prompt_type=prompt_type,
-        output_format=output_format,
-    )
+        return output
 
 
 # =============================================================================

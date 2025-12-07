@@ -6,10 +6,10 @@
 
 from __future__ import annotations
 
+import json
 from pathlib import Path
-from typing import Any
 
-from cudag.annotation.loader import ParsedAnnotation, ParsedElement, ParsedTask
+from cudag.annotation.loader import ParsedAnnotation
 from cudag.annotation.codegen import (
     generate_screen_py,
     generate_state_py,
@@ -32,12 +32,15 @@ def scaffold_generator(
 ) -> list[Path]:
     """Scaffold a complete CUDAG generator project from annotation.
 
+    Uses annotation-driven architecture where annotation.json is loaded at
+    runtime via AnnotationConfig, enabling updates without regenerating code.
+
     Args:
         name: Project name (used for directory name)
         annotation: Parsed annotation data
         output_dir: Parent directory for the project
-        original_image: Original image bytes (for assets/blanks/base.png)
-        masked_image: Masked image bytes (optional)
+        original_image: Original screenshot bytes
+        masked_image: Masked image bytes (with dynamic regions blanked)
         icons: Map of icon names to image bytes (optional)
 
     Returns:
@@ -48,11 +51,16 @@ def scaffold_generator(
 
     created_files: list[Path] = []
 
-    # Create directory structure
+    # Create directory structure (annotation-driven layout)
     (project_dir / "tasks").mkdir(exist_ok=True)
-    (project_dir / "assets" / "blanks").mkdir(parents=True, exist_ok=True)
+    (project_dir / "assets" / "annotations").mkdir(parents=True, exist_ok=True)
     (project_dir / "assets" / "icons").mkdir(exist_ok=True)
     (project_dir / "config").mkdir(exist_ok=True)
+
+    # Save annotation.json (single source of truth)
+    annotation_json = project_dir / "assets" / "annotations" / "annotation.json"
+    annotation_json.write_text(json.dumps(annotation.to_dict(), indent=2))
+    created_files.append(annotation_json)
 
     # Generate Python files
     screen_py = project_dir / "screen.py"
@@ -91,14 +99,14 @@ def scaffold_generator(
     pyproject.write_text(generate_pyproject_toml(name))
     created_files.append(pyproject)
 
-    # Save assets
+    # Save images to annotations directory
     if original_image:
-        base_png = project_dir / "assets" / "blanks" / "base.png"
-        base_png.write_bytes(original_image)
-        created_files.append(base_png)
+        original_png = project_dir / "assets" / "annotations" / "original.png"
+        original_png.write_bytes(original_image)
+        created_files.append(original_png)
 
     if masked_image:
-        masked_png = project_dir / "assets" / "blanks" / "masked.png"
+        masked_png = project_dir / "assets" / "annotations" / "masked.png"
         masked_png.write_bytes(masked_image)
         created_files.append(masked_png)
 

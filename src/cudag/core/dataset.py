@@ -59,6 +59,9 @@ class DatasetConfig:
     test_count: int = 100
     """Number of test cases to generate."""
 
+    test_distribution: dict[str, int] = field(default_factory=dict)
+    """Per-task test counts. Overrides auto-distribution when set."""
+
     test_tolerance: tuple[int, int] = (10, 10)
     """Coordinate tolerance for test (x, y in RU units)."""
 
@@ -143,6 +146,7 @@ class DatasetConfig:
             held_out_enabled=data.get("held_out", {}).get("enabled", False),
             held_out_ratio=data.get("held_out", {}).get("ratio", 0.1),
             test_count=data.get("test", {}).get("count", 100),
+            test_distribution=data.get("test", {}).get("distribution", {}),
             test_tolerance=_parse_tolerance(data.get("test", {}).get("tolerance", [10, 10])),
             annotation_ratio=data.get("annotation", {}).get("ratio", 0.1),
             annotation_enabled=data.get("annotation", {}).get("enabled", True),
