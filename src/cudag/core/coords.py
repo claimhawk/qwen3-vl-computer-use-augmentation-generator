@@ -4,17 +4,21 @@
 
 """Coordinate system utilities for RU (Resolution Units) normalization.
 
-All coordinates in CUDAG use RU normalized with aspect ratio preservation.
-The larger dimension maps to [0, 1000], the smaller dimension scales proportionally.
+All coordinates in CUDAG use RU normalized with independent axis scaling.
+Both X and Y axes map independently to [0, 1000], matching Qwen3-VL's
+coordinate system.
 
 For a 1920x1080 image:
-- Width (1920) is larger, x range: [0, 1000]
-- Height (1080) scales: 1080/1920 * 1000 = 562, y range: [0, 562]
+- X range: [0, 1000] (pixel_x / 1920 * 1000)
+- Y range: [0, 1000] (pixel_y / 1080 * 1000)
 
-Conversion formulas (using max dimension as scale):
-    scale = 1000 / max(width, height)
-    normalized_x = pixel_x * scale
-    normalized_y = pixel_y * scale
+Conversion formulas (independent scaling per axis):
+    normalized_x = pixel_x / width * 1000
+    normalized_y = pixel_y / height * 1000
+
+To convert back to pixels:
+    pixel_x = normalized_x / 1000 * width
+    pixel_y = normalized_y / 1000 * height
 """
 
 from __future__ import annotations
@@ -29,32 +33,31 @@ def normalize_coord(
     pixel: tuple[int, int],
     image_size: tuple[int, int],
 ) -> tuple[int, int]:
-    """Convert pixel coordinates to RU (Resolution Units) preserving aspect ratio.
+    """Convert pixel coordinates to RU (Resolution Units) with independent scaling.
 
-    The larger image dimension maps to [0, 1000].
-    The smaller dimension maps to [0, N] where N < 1000.
+    Both X and Y axes map independently to [0, 1000], matching Qwen3-VL's
+    coordinate system where coordinates are normalized to a 1000x1000 grid
+    regardless of the original image dimensions.
 
     Args:
         pixel: (x, y) pixel coordinates
         image_size: (width, height) of the image
 
     Returns:
-        (x, y) normalized coordinates preserving aspect ratio
+        (x, y) normalized coordinates in [0, 1000] range for both axes
 
     Example:
         For 1920x1080 image, point (960, 540):
-        - scale = 1000 / 1920 = 0.521
-        - x_norm = 960 * 0.521 = 500
-        - y_norm = 540 * 0.521 = 281
+        - x_norm = 960 / 1920 * 1000 = 500
+        - y_norm = 540 / 1080 * 1000 = 500
     """
     width, height = image_size
     if width <= 0 or height <= 0:
         raise ValueError(f"Invalid image size: {image_size}")
 
-    # Scale based on larger dimension to preserve aspect ratio
-    scale = RU_MAX / max(width, height)
-    x_norm = int(round(pixel[0] * scale))
-    y_norm = int(round(pixel[1] * scale))
+    # Independent scaling per axis (Qwen3-VL format)
+    x_norm = int(round(pixel[0] / width * RU_MAX))
+    y_norm = int(round(pixel[1] / height * RU_MAX))
     return (x_norm, y_norm)
 
 
@@ -64,43 +67,51 @@ def pixel_from_normalized(
 ) -> tuple[int, int]:
     """Convert RU (Resolution Units) coordinates back to pixels.
 
+    Reverses the independent axis scaling used in normalize_coord().
+
     Args:
-        normalized: (x, y) coordinates in RU
+        normalized: (x, y) coordinates in RU [0, 1000]
         image_size: (width, height) of the image
 
     Returns:
         (x, y) pixel coordinates
+
+    Example:
+        For 1920x1080 image, RU point (500, 500):
+        - x_pixel = 500 / 1000 * 1920 = 960
+        - y_pixel = 500 / 1000 * 1080 = 540
     """
     width, height = image_size
     if width <= 0 or height <= 0:
         raise ValueError(f"Invalid image size: {image_size}")
 
-    # Reverse the scale
-    scale = RU_MAX / max(width, height)
-    x_pixel = int(round(normalized[0] / scale))
-    y_pixel = int(round(normalized[1] / scale))
+    # Reverse independent scaling per axis
+    x_pixel = int(round(normalized[0] / RU_MAX * width))
+    y_pixel = int(round(normalized[1] / RU_MAX * height))
     return (x_pixel, y_pixel)
 
 
 def get_normalized_bounds(image_size: tuple[int, int]) -> tuple[int, int]:
     """Get the maximum normalized coordinates for an image.
 
+    With independent axis scaling, both axes always map to [0, 1000].
+
     Args:
         image_size: (width, height) of the image
 
     Returns:
-        (max_x, max_y) in RU coordinates
+        (max_x, max_y) in RU coordinates - always (1000, 1000)
 
     Example:
-        For 1920x1080: returns (1000, 562)
-        For 1080x1920: returns (562, 1000)
+        For 1920x1080: returns (1000, 1000)
+        For 1080x1920: returns (1000, 1000)
     """
     width, height = image_size
     if width <= 0 or height <= 0:
         raise ValueError(f"Invalid image size: {image_size}")
 
-    scale = RU_MAX / max(width, height)
-    return (int(round(width * scale)), int(round(height * scale)))
+    # Both axes always map to 1000 with independent scaling
+    return (RU_MAX, RU_MAX)
 
 
 def clamp_coord(coord: tuple[int, int], max_val: int = RU_MAX) -> tuple[int, int]:
@@ -155,6 +166,8 @@ def tolerance_to_ru(
 ) -> tuple[int, int]:
     """Convert pixel tolerance to normalized RU units.
 
+    Uses independent axis scaling to match normalize_coord().
+
     Args:
         tolerance_pixels: (width, height) tolerance in pixels
         image_size: (width, height) of the image
@@ -166,10 +179,10 @@ def tolerance_to_ru(
         >>> tolerance_to_ru((50, 30), (1920, 1080))
         (26, 28)
     """
-    scale = RU_MAX / max(image_size)
+    width, height = image_size
     return (
-        int(round(tolerance_pixels[0] * scale)),
-        int(round(tolerance_pixels[1] * scale)),
+        int(round(tolerance_pixels[0] / width * RU_MAX)),
+        int(round(tolerance_pixels[1] / height * RU_MAX)),
     )
 
 

@@ -403,13 +403,19 @@ class DatasetBuilder:
         # Get normalized coordinates
         norm_coord = normalize_coord(sample.pixel_coords, sample.image_size)
 
-        # Update tool call with normalized coordinates
-        tool_call = sample.tool_call.to_dict()
-        if "coordinate" in tool_call["arguments"]:
-            tool_call["arguments"]["coordinate"] = list(norm_coord)
-
-        # Format GPT response
-        gpt_value = format_tool_call(tool_call)
+        # Check if sample has multiple tool_calls in metadata
+        if "tool_calls" in sample.metadata and len(sample.metadata["tool_calls"]) > 1:
+            # Format all tool calls for multi-action samples
+            gpt_parts = []
+            for tc in sample.metadata["tool_calls"]:
+                gpt_parts.append(format_tool_call(tc))
+            gpt_value = "\n".join(gpt_parts)
+        else:
+            # Single tool call - update with normalized coordinates
+            tool_call = sample.tool_call.to_dict()
+            if "coordinate" in tool_call["arguments"]:
+                tool_call["arguments"]["coordinate"] = list(norm_coord)
+            gpt_value = format_tool_call(tool_call)
 
         # Build relative image path
         assert self.config.output_dir is not None

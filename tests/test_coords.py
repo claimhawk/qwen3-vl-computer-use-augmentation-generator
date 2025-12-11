@@ -22,8 +22,9 @@ from cudag.core.coords import (
 class TestNormalizeCoord:
     """Tests for normalize_coord function.
 
-    Coordinates are normalized preserving aspect ratio.
-    The larger dimension maps to [0, 1000], the smaller scales proportionally.
+    Coordinates are normalized with independent axis scaling.
+    Both X and Y axes map independently to [0, 1000], matching Qwen3-VL's
+    coordinate system.
     """
 
     def test_normalize_center(self) -> None:
@@ -40,32 +41,39 @@ class TestNormalizeCoord:
         assert result == (1000, 1000)
 
     def test_normalize_non_square_landscape(self) -> None:
-        # 800x600 image (landscape)
-        # max=800, scale=1.25
-        # Pixel (400, 300) -> (500, 375)
+        # 800x600 image (landscape) - independent scaling
+        # x: 400/800*1000 = 500
+        # y: 300/600*1000 = 500
         result = normalize_coord((400, 300), (800, 600))
-        assert result == (500, 375)
+        assert result == (500, 500)
 
     def test_normalize_non_square_portrait(self) -> None:
-        # 600x800 image (portrait)
-        # max=800, scale=1.25
-        # Pixel (300, 400) -> (375, 500)
+        # 600x800 image (portrait) - independent scaling
+        # x: 300/600*1000 = 500
+        # y: 400/800*1000 = 500
         result = normalize_coord((300, 400), (600, 800))
-        assert result == (375, 500)
+        assert result == (500, 500)
 
     def test_normalize_1920x1080(self) -> None:
-        # 1920x1080 image (16:9)
-        # max=1920, scale=1000/1920=0.521
-        # Pixel (960, 540) -> center: (500, 281)
+        # 1920x1080 image (16:9) - independent scaling
+        # x: 960/1920*1000 = 500
+        # y: 540/1080*1000 = 500
         result = normalize_coord((960, 540), (1920, 1080))
-        assert result == (500, 281)
+        assert result == (500, 500)
 
     def test_normalize_rounds_correctly(self) -> None:
-        # 1155x853 image (from claim window)
-        # max=1155, scale=1000/1155=0.866
-        # Pixel at (577, 300) -> (577*0.866, 300*0.866) = (500, 260)
+        # 1155x853 image (from claim window) - independent scaling
+        # x: 577/1155*1000 = 499.6 -> 500
+        # y: 300/853*1000 = 351.7 -> 352
         result = normalize_coord((577, 300), (1155, 853))
-        assert result == (500, 260)
+        assert result == (500, 352)
+
+    def test_normalize_corner_cases(self) -> None:
+        # Bottom-right corner of 1920x1080
+        # x: 1920/1920*1000 = 1000
+        # y: 1080/1080*1000 = 1000
+        result = normalize_coord((1920, 1080), (1920, 1080))
+        assert result == (1000, 1000)
 
     def test_normalize_invalid_size_raises(self) -> None:
         with pytest.raises(ValueError):
@@ -92,14 +100,25 @@ class TestPixelFromNormalized:
         assert result == (1000, 1000)
 
     def test_pixel_non_square_landscape(self) -> None:
-        # Normalized (500, 375) on 800x600 image should be (400, 300)
-        result = pixel_from_normalized((500, 375), (800, 600))
+        # Normalized (500, 500) on 800x600 image - independent scaling
+        # x: 500/1000*800 = 400
+        # y: 500/1000*600 = 300
+        result = pixel_from_normalized((500, 500), (800, 600))
         assert result == (400, 300)
 
     def test_pixel_non_square_portrait(self) -> None:
-        # Normalized (375, 500) on 600x800 image should be (300, 400)
-        result = pixel_from_normalized((375, 500), (600, 800))
+        # Normalized (500, 500) on 600x800 image - independent scaling
+        # x: 500/1000*600 = 300
+        # y: 500/1000*800 = 400
+        result = pixel_from_normalized((500, 500), (600, 800))
         assert result == (300, 400)
+
+    def test_pixel_1920x1080(self) -> None:
+        # Normalized (500, 500) on 1920x1080 image
+        # x: 500/1000*1920 = 960
+        # y: 500/1000*1080 = 540
+        result = pixel_from_normalized((500, 500), (1920, 1080))
+        assert result == (960, 540)
 
     def test_pixel_invalid_size_raises(self) -> None:
         with pytest.raises(ValueError):
@@ -126,7 +145,10 @@ class TestPixelFromNormalized:
 
 
 class TestGetNormalizedBounds:
-    """Tests for get_normalized_bounds function."""
+    """Tests for get_normalized_bounds function.
+
+    With independent axis scaling, both axes always map to [0, 1000].
+    """
 
     def test_square_image(self) -> None:
         # 1000x1000 square -> (1000, 1000)
@@ -134,25 +156,19 @@ class TestGetNormalizedBounds:
         assert result == (1000, 1000)
 
     def test_landscape_image(self) -> None:
-        # 1920x1080 (16:9 landscape)
-        # scale = 1000/1920 = 0.521
-        # bounds = (1000, 1080*0.521) = (1000, 562)
+        # 1920x1080 (16:9 landscape) - both axes map to 1000
         result = get_normalized_bounds((1920, 1080))
-        assert result == (1000, 562)
+        assert result == (1000, 1000)
 
     def test_portrait_image(self) -> None:
-        # 1080x1920 (9:16 portrait)
-        # scale = 1000/1920 = 0.521
-        # bounds = (1080*0.521, 1000) = (562, 1000)
+        # 1080x1920 (9:16 portrait) - both axes map to 1000
         result = get_normalized_bounds((1080, 1920))
-        assert result == (562, 1000)
+        assert result == (1000, 1000)
 
     def test_800x600(self) -> None:
-        # 800x600 (4:3 landscape)
-        # scale = 1000/800 = 1.25
-        # bounds = (1000, 600*1.25) = (1000, 750)
+        # 800x600 (4:3 landscape) - both axes map to 1000
         result = get_normalized_bounds((800, 600))
-        assert result == (1000, 750)
+        assert result == (1000, 1000)
 
     def test_invalid_size_raises(self) -> None:
         with pytest.raises(ValueError):
