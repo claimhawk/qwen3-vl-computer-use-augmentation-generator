@@ -28,6 +28,7 @@ Example:
 from __future__ import annotations
 
 from dataclasses import dataclass, field
+from datetime import date
 from pathlib import Path
 from random import Random
 from typing import Any
@@ -63,6 +64,7 @@ class TaskbarState:
         taskbar_left_margin: int = 946,
         taskbar_y_offset: int = 1042,
         icon_gap: int = 8,
+        target_date: date | None = None,
     ) -> "TaskbarState":
         """Generate random taskbar state.
 
@@ -74,12 +76,13 @@ class TaskbarState:
             taskbar_left_margin: X position where icons start
             taskbar_y_offset: Y position for icons
             icon_gap: Gap between icons
+            target_date: Specific date to display (for consistent calendar/taskbar)
 
         Returns:
             TaskbarState with randomized icons and datetime
         """
         state = cls()
-        state.datetime_text = cls._generate_datetime(rng)
+        state.datetime_text = cls._generate_datetime(rng, target_date)
         state.datetime_position = datetime_position
 
         if icon_config is not None:
@@ -95,14 +98,31 @@ class TaskbarState:
         return state
 
     @classmethod
-    def _generate_datetime(cls, rng: Random) -> str:
-        """Generate random datetime string in Windows 11 format."""
+    def _generate_datetime(cls, rng: Random, target_date: date | None = None) -> str:
+        """Generate datetime string in Windows 11 format.
+
+        Args:
+            rng: Random number generator for time component
+            target_date: Specific date to use (or None for random)
+
+        Returns:
+            Formatted datetime string like "1:30 PM\\n12/15/2025"
+        """
+        # Time is always random
         hour = rng.randint(1, 12)
         minute = rng.randint(0, 59)
         am_pm = rng.choice(["AM", "PM"])
-        month = rng.randint(1, 12)
-        day = rng.randint(1, 28)
-        year = rng.randint(2024, 2025)
+
+        # Date from target_date or random
+        if target_date is not None:
+            month = target_date.month
+            day = target_date.day
+            year = target_date.year
+        else:
+            month = rng.randint(1, 12)
+            day = rng.randint(1, 28)
+            year = rng.randint(2024, 2025)
+
         return f"{hour}:{minute:02d} {am_pm}\n{month}/{day}/{year}"
 
     @classmethod
