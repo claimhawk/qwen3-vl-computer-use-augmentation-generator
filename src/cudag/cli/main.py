@@ -211,11 +211,23 @@ def serve(host: str, port: int, reload: bool) -> None:
     "-n",
     help="Project name (default: derived from annotation)",
 )
-def from_annotation(annotation_path: str, output_dir: str, name: str | None) -> None:
-    """Create a CUDAG project from an annotation ZIP.
+@click.option(
+    "--in-place",
+    "-i",
+    is_flag=True,
+    help="Write directly to output-dir without creating a subdirectory",
+)
+def from_annotation(
+    annotation_path: str, output_dir: str, name: str | None, in_place: bool
+) -> None:
+    """Create a CUDAG project from an annotation folder or ZIP.
 
-    ANNOTATION_PATH is the path to an annotation.zip file exported
-    from the Annotator application.
+    ANNOTATION_PATH is the path to an annotation folder or .zip file
+    exported from the Annotator application. The folder should contain:
+    - annotation.json: Element and task definitions
+    - original.png: Original screenshot
+    - masked.png: Screenshot with masked regions
+    - icons/: Optional folder with extracted icons
 
     This generates a complete project structure with:
     - screen.py: Screen definition with regions
@@ -229,32 +241,49 @@ def from_annotation(annotation_path: str, output_dir: str, name: str | None) -> 
     from cudag.annotation import AnnotationLoader, scaffold_generator
 
     loader = AnnotationLoader()
-
-    # Load annotation
-    annotation_file = Path(annotation_path)
-    if not annotation_file.suffix == ".zip":
-        click.secho("Error: Expected a .zip file", fg="red")
-        raise SystemExit(1)
+    annotation_source = Path(annotation_path)
 
     try:
-        parsed = loader.load(annotation_file)
+        parsed = loader.load(annotation_source)
     except Exception as e:
         click.secho(f"Error loading annotation: {e}", fg="red")
         raise SystemExit(1)
 
     project_name = name or parsed.screen_name
 
-    # Extract images from ZIP
-    with zipfile.ZipFile(annotation_file) as zf:
-        original_bytes = zf.read("original.png") if "original.png" in zf.namelist() else None
-        masked_bytes = zf.read("masked.png") if "masked.png" in zf.namelist() else None
+    # Load images from folder or ZIP
+    if annotation_source.is_dir():
+        # Load from folder
+        original_path = annotation_source / "original.png"
+        masked_path = annotation_source / "masked.png"
+        icons_dir = annotation_source / "icons"
 
-        # Extract icons
+        original_bytes = original_path.read_bytes() if original_path.exists() else None
+        masked_bytes = masked_path.read_bytes() if masked_path.exists() else None
+
         icons: dict[str, bytes] = {}
-        for filename in zf.namelist():
-            if filename.startswith("icons/") and filename.endswith(".png"):
-                icon_name = Path(filename).stem
-                icons[icon_name] = zf.read(filename)
+        if icons_dir.exists():
+            for icon_file in icons_dir.glob("*.png"):
+                icons[icon_file.stem] = icon_file.read_bytes()
+    else:
+        # Load from ZIP
+        if not annotation_source.suffix == ".zip":
+            click.secho("Error: Expected a folder or .zip file", fg="red")
+            raise SystemExit(1)
+
+        with zipfile.ZipFile(annotation_source) as zf:
+            original_bytes = (
+                zf.read("original.png") if "original.png" in zf.namelist() else None
+            )
+            masked_bytes = (
+                zf.read("masked.png") if "masked.png" in zf.namelist() else None
+            )
+
+            icons = {}
+            for filename in zf.namelist():
+                if filename.startswith("icons/") and filename.endswith(".png"):
+                    icon_name = Path(filename).stem
+                    icons[icon_name] = zf.read(filename)
 
     # Scaffold project
     output_path = Path(output_dir)
@@ -265,9 +294,10 @@ def from_annotation(annotation_path: str, output_dir: str, name: str | None) -> 
         original_image=original_bytes,
         masked_image=masked_bytes,
         icons=icons,
+        in_place=in_place,
     )
 
-    project_dir = output_path / project_name
+    project_dir = output_path if in_place else output_path / project_name
     click.secho(f"Created project: {project_dir}", fg="green")
     click.echo(f"\nGenerated {len(files)} files:")
     for f in files[:10]:

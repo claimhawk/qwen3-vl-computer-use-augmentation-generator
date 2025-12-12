@@ -104,6 +104,24 @@ class AnnotatedElement:
     selectable_cell: bool = False
     """If True, individual grid cells are selectable."""
 
+    first_row_header: bool = False
+    """If True, first row is a fixed header (doesn't scroll)."""
+
+    last_col_scroll: bool = False
+    """If True, last column is reserved for vertical scrollbar."""
+
+    last_row_scroll: bool = False
+    """If True, last row is reserved for horizontal scrollbar."""
+
+    hide_grid_lines: bool = False
+    """If True, don't draw grid lines between cells."""
+
+    show_grid_lines: bool = False
+    """If True, draw grid lines between cells."""
+
+    scrollable: bool = False
+    """If True, this element supports scrolling."""
+
     # Tolerance from annotation (in pixels)
     tolerance_x: int = 0
     tolerance_y: int = 0
@@ -137,6 +155,24 @@ class AnnotatedElement:
     def get_optional_icons(self) -> list[AnnotatedIcon]:
         """Get icons not marked as required."""
         return [icon for icon in self.icons if not icon.required]
+
+    @property
+    def data_rows(self) -> int:
+        """Number of rows available for data (excluding header/scroll rows)."""
+        count = self.rows
+        if self.first_row_header:
+            count -= 1
+        if self.last_row_scroll:
+            count -= 1
+        return max(0, count)
+
+    @property
+    def data_cols(self) -> int:
+        """Number of columns available for data (excluding scroll column)."""
+        count = self.cols
+        if self.last_col_scroll:
+            count -= 1
+        return max(0, count)
 
 
 @dataclass
@@ -271,6 +307,12 @@ class AnnotationConfig:
             col_widths=el.get("colWidths", []),
             row_heights=el.get("rowHeights", []),
             selectable_cell=el.get("selectableCell", False),
+            first_row_header=el.get("firstRowHeader", False),
+            last_col_scroll=el.get("lastColScroll", False),
+            last_row_scroll=el.get("lastRowScroll", False),
+            hide_grid_lines=el.get("hideGridLines", False),
+            show_grid_lines=el.get("showGridLines", False),
+            scrollable=el.get("scrollable", False),
             tolerance_x=el.get("toleranceX", 0),
             tolerance_y=el.get("toleranceY", 0),
             mask_color=el.get("maskColor"),

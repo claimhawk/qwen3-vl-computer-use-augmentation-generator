@@ -50,6 +50,7 @@ from cudag.core.icon import (
     IconPlacement,
     IconSpec,
 )
+from cudag.core.taskbar import TaskbarRenderer, TaskbarState
 from cudag.core.dataset import DatasetBuilder, DatasetConfig
 from cudag.core.distribution import DistributionSampler
 from cudag.core.scroll_task import ScrollTaskBase, ScrollTaskConfig
@@ -205,6 +206,9 @@ __all__ = [
     "TOOLBAR_ICON",
     "APP_ICON_LARGE",
     "APP_ICON_SMALL",
+    # Taskbar
+    "TaskbarState",
+    "TaskbarRenderer",
     # Buttons
     "ButtonSpec",
     "ButtonPlacement",

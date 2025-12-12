@@ -214,17 +214,20 @@ class AnnotationLoader:
     """Load and parse annotation data from various sources."""
 
     def load(self, path: Path | str | BinaryIO) -> ParsedAnnotation:
-        """Load annotation from a file or stream.
+        """Load annotation from a file, folder, or stream.
 
         Args:
-            path: Path to annotation.json or annotation.zip, or a file-like object
+            path: Path to annotation.json, annotation.zip, annotation folder,
+                  or a file-like object
 
         Returns:
             Parsed annotation data
         """
         if isinstance(path, (str, Path)):
             path = Path(path)
-            if path.suffix == ".zip":
+            if path.is_dir():
+                return self._load_folder(path)
+            elif path.suffix == ".zip":
                 return self._load_zip(path)
             else:
                 with open(path) as f:
@@ -233,6 +236,15 @@ class AnnotationLoader:
         else:
             # File-like object - assume ZIP
             return self._load_zip_stream(path)
+
+    def _load_folder(self, path: Path) -> ParsedAnnotation:
+        """Load annotation from unpacked folder."""
+        annotation_file = path / "annotation.json"
+        if not annotation_file.exists():
+            raise FileNotFoundError(f"No annotation.json found in {path}")
+        with open(annotation_file) as f:
+            data = json.load(f)
+        return self.parse_dict(data)
 
     def _load_zip(self, path: Path) -> ParsedAnnotation:
         """Load annotation from ZIP file."""

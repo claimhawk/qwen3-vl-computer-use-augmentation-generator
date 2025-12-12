@@ -56,6 +56,48 @@ class GridGeometry:
     col_gap: float = 0
     """Gap between columns in pixels (can be float)."""
 
+    first_row_header: bool = False
+    """If True, first row is a fixed header (doesn't scroll)."""
+
+    last_col_scroll: bool = False
+    """If True, last column is reserved for scrollbar."""
+
+    last_row_scroll: bool = False
+    """If True, last row is reserved for horizontal scrollbar."""
+
+    @property
+    def data_rows(self) -> int:
+        """Number of rows available for data (excluding header/scroll rows)."""
+        count = self.rows
+        if self.first_row_header:
+            count -= 1
+        if self.last_row_scroll:
+            count -= 1
+        return max(0, count)
+
+    @property
+    def data_cols(self) -> int:
+        """Number of columns available for data (excluding scroll column)."""
+        count = self.cols
+        if self.last_col_scroll:
+            count -= 1
+        return max(0, count)
+
+    @property
+    def header_row(self) -> int | None:
+        """Row index of header, or None if no header."""
+        return 0 if self.first_row_header else None
+
+    @property
+    def scroll_col(self) -> int | None:
+        """Column index of scrollbar, or None if no scrollbar."""
+        return self.cols - 1 if self.last_col_scroll else None
+
+    @property
+    def scroll_row(self) -> int | None:
+        """Row index of horizontal scrollbar, or None if no scrollbar."""
+        return self.rows - 1 if self.last_row_scroll else None
+
     @property
     def width(self) -> int:
         """Total grid width including gaps."""

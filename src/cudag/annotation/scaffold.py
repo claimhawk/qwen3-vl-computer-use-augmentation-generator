@@ -29,6 +29,7 @@ def scaffold_generator(
     original_image: bytes | None = None,
     masked_image: bytes | None = None,
     icons: dict[str, bytes] | None = None,
+    in_place: bool = False,
 ) -> list[Path]:
     """Scaffold a complete CUDAG generator project from annotation.
 
@@ -42,11 +43,12 @@ def scaffold_generator(
         original_image: Original screenshot bytes
         masked_image: Masked image bytes (with dynamic regions blanked)
         icons: Map of icon names to image bytes (optional)
+        in_place: If True, write directly to output_dir without creating subdirectory
 
     Returns:
         List of created file paths
     """
-    project_dir = output_dir / name
+    project_dir = output_dir if in_place else output_dir / name
     project_dir.mkdir(parents=True, exist_ok=True)
 
     created_files: list[Path] = []
