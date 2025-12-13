@@ -125,6 +125,58 @@ COMPUTER_USE_TOOL: dict[str, Any] = {
 
 
 @dataclass
+class BboxCall:
+    """Represents a get_bbox tool call for element grounding.
+
+    This is the canonical format for bounding box detection in VLMGen datasets.
+    Used for "grounding" task types that identify element locations.
+    """
+
+    element: str
+    """Description of the element being located."""
+
+    bbox_2d: tuple[int, int, int, int]
+    """Bounding box coordinates [x1, y1, x2, y2] in RU (0-1000)."""
+
+    def to_dict(self) -> dict[str, Any]:
+        """Convert to dictionary for JSON serialization."""
+        return {
+            "name": "get_bbox",
+            "arguments": {
+                "element": self.element,
+                "bbox_2d": list(self.bbox_2d),
+            },
+        }
+
+    @classmethod
+    def from_dict(cls, data: dict[str, Any]) -> BboxCall:
+        """Create from dictionary."""
+        if data.get("name") != "get_bbox":
+            raise ValueError(f"Expected get_bbox tool, got: {data.get('name')}")
+
+        args = data.get("arguments", {})
+        bbox = args.get("bbox_2d", [0, 0, 0, 0])
+
+        return cls(
+            element=args.get("element", ""),
+            bbox_2d=tuple(bbox),  # type: ignore[arg-type]
+        )
+
+    @classmethod
+    def create(cls, element: str, bbox_2d: tuple[int, int, int, int]) -> BboxCall:
+        """Create a get_bbox tool call.
+
+        Args:
+            element: Description of the element (e.g., "search button")
+            bbox_2d: Bounding box [x1, y1, x2, y2] in RU units (0-1000)
+
+        Returns:
+            BboxCall instance
+        """
+        return cls(element=element, bbox_2d=bbox_2d)
+
+
+@dataclass
 class ToolCall:
     """Represents a computer_use tool call.
 
@@ -227,21 +279,26 @@ class ToolCall:
         return cls(action="terminate", status=status)
 
 
-def format_tool_call(tool_call: ToolCall | dict[str, Any]) -> str:
+def format_tool_call(tool_call: ToolCall | BboxCall | dict[str, Any]) -> str:
     """Format a tool call as XML-wrapped JSON string.
 
     This is the canonical output format for GPT responses in training data.
 
     Args:
-        tool_call: ToolCall instance or dict with {name, arguments}
+        tool_call: ToolCall, BboxCall instance, or dict with {name, arguments}
 
     Returns:
         Formatted string like:
         <tool_call>
         {"name": "computer_use", "arguments": {...}}
         </tool_call>
+
+        or for bounding box:
+        <tool_call>
+        {"name": "get_bbox", "arguments": {"element": "...", "bbox_2d": [...]}}
+        </tool_call>
     """
-    if isinstance(tool_call, ToolCall):
+    if isinstance(tool_call, (ToolCall, BboxCall)):
         data = tool_call.to_dict()
     else:
         data = tool_call

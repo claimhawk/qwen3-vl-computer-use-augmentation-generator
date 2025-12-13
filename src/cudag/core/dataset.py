@@ -15,7 +15,7 @@ import random
 from dataclasses import dataclass, field
 from datetime import datetime
 from pathlib import Path
-from typing import Any
+from typing import Any, Callable
 
 from cudag.core.coords import normalize_coord
 from cudag.core.task import BaseTask, TaskContext, TaskSample, TestCase
@@ -57,7 +57,7 @@ class DatasetConfig:
     """Fraction of samples to hold out."""
 
     test_count: int = 100
-    """Number of test cases to generate."""
+    """Number of test cases to generate PER TASK TYPE."""
 
     test_distribution: dict[str, int] = field(default_factory=dict)
     """Per-task test counts. Overrides auto-distribution when set."""
@@ -202,11 +202,13 @@ def annotate_test_image(
     pixel_coords: tuple[int, int],
     prompt: str,
     output_path: Path | None = None,
+    bbox_pixels: tuple[int, int, int, int] | None = None,
 ) -> Path:
     """Annotate a test image with tool call output and prompt.
 
     Draws:
-    - Red crosshair at the click location
+    - Red crosshair at the click location (for click/hover tasks)
+    - Red bounding box rectangle (for grounding tasks with bbox_pixels)
     - Extends canvas with white bar at bottom for prompt and <tool_call> output
 
     Args:
@@ -216,6 +218,8 @@ def annotate_test_image(
         prompt: The user prompt text to display.
         output_path: Where to save the annotated image. If None, saves
                      to same directory with "_annotated" suffix.
+        bbox_pixels: Optional bounding box as (x, y, width, height) in pixels.
+                     If provided, draws a rectangle instead of crosshair.
 
     Returns:
         Path to the annotated image.
@@ -268,21 +272,30 @@ def annotate_test_image(
     img.paste(original, (0, 0))
 
     draw = ImageDraw.Draw(img)
-    x, y = pixel_coords
+    annotation_color = (255, 0, 0)  # Red
 
-    # Draw crosshair at click location
-    crosshair_size = 10
-    crosshair_color = (255, 0, 0)  # Red
-    # Horizontal line
-    draw.line([(x - crosshair_size, y), (x + crosshair_size, y)], fill=crosshair_color, width=2)
-    # Vertical line
-    draw.line([(x, y - crosshair_size), (x, y + crosshair_size)], fill=crosshair_color, width=2)
-    # Circle around crosshair
-    draw.ellipse(
-        [(x - crosshair_size, y - crosshair_size), (x + crosshair_size, y + crosshair_size)],
-        outline=crosshair_color,
-        width=2,
-    )
+    if bbox_pixels is not None:
+        # Draw bounding box rectangle for grounding tasks
+        bx, by, bw, bh = bbox_pixels
+        draw.rectangle(
+            [(bx, by), (bx + bw, by + bh)],
+            outline=annotation_color,
+            width=3,
+        )
+    else:
+        # Draw crosshair at click location
+        x, y = pixel_coords
+        crosshair_size = 10
+        # Horizontal line
+        draw.line([(x - crosshair_size, y), (x + crosshair_size, y)], fill=annotation_color, width=2)
+        # Vertical line
+        draw.line([(x, y - crosshair_size), (x, y + crosshair_size)], fill=annotation_color, width=2)
+        # Circle around crosshair
+        draw.ellipse(
+            [(x - crosshair_size, y - crosshair_size), (x + crosshair_size, y + crosshair_size)],
+            outline=annotation_color,
+            width=2,
+        )
 
     # Draw wrapped prompt text in the extended area below the original image
     current_y = orig_height + 4
@@ -337,8 +350,18 @@ class DatasetBuilder:
         self.tasks = {t.task_type: t for t in tasks}
         self.rng = random.Random(config.seed)
 
-    def build(self) -> Path:
+    def build(
+        self,
+        start_index: int = 0,
+        checkpoint_callback: Callable[[int], None] | None = None,
+        checkpoint_interval: int = 1000,
+    ) -> Path:
         """Generate the complete dataset.
+
+        Args:
+            start_index: Skip samples up to this index (for resume after preemption)
+            checkpoint_callback: Called with sample count every checkpoint_interval samples
+            checkpoint_interval: How often to call checkpoint_callback (default 1000)
 
         Returns:
             Path to the output directory
@@ -354,6 +377,8 @@ class DatasetBuilder:
         samples: list[dict[str, Any]] = []
         held_out: list[dict[str, Any]] = []
         index = 0
+        samples_generated = 0
+        last_checkpoint = 0
 
         for task_type, count in self.config.task_counts.items():
             if task_type not in self.tasks:
@@ -361,6 +386,11 @@ class DatasetBuilder:
 
             task = self.tasks[task_type]
             for _ in range(count):
+                # Skip samples until we reach start_index
+                if index < start_index:
+                    index += 1
+                    continue
+
                 ctx = TaskContext(
                     rng=self.rng,
                     index=index,
@@ -382,6 +412,12 @@ class DatasetBuilder:
                         samples.append(record)
 
                 index += 1
+                samples_generated += 1
+
+                # Checkpoint callback
+                if checkpoint_callback and samples_generated - last_checkpoint >= checkpoint_interval:
+                    checkpoint_callback(samples_generated)
+                    last_checkpoint = samples_generated
 
         # Write data files
         self._write_jsonl(output_dir / "data.jsonl", samples + held_out)
@@ -503,43 +539,14 @@ class DatasetBuilder:
         if not task_types:
             return test_dir
 
-        # Use explicit test_distribution if provided, otherwise round-robin
-        if self.config.test_distribution:
-            # Generate tests according to distribution
-            tests_per_type: dict[str, int] = {}
-            for task_type in task_types:
-                tests_per_type[task_type] = self.config.test_distribution.get(task_type, 0)
+        # Generate test_count tests PER task type
+        for task_type in task_types:
+            if task_type not in self.tasks:
+                continue
+            task = self.tasks[task_type]
+            generated = 0
 
-            for task_type, target_count in tests_per_type.items():
-                if target_count <= 0 or task_type not in self.tasks:
-                    continue
-                task = self.tasks[task_type]
-                generated = 0
-
-                while generated < target_count:
-                    ctx = TaskContext(
-                        rng=self.rng,
-                        index=index,
-                        output_dir=test_dir,
-                        config=task.config,
-                        dataset_name=self.config.name_prefix,
-                    )
-                    tests = task.generate_tests(ctx)
-                    for test_case in tests:
-                        if generated >= target_count:
-                            break
-                        record = self._test_to_record(test_case, test_dir)
-                        test_cases.append(record)
-                        raw_test_cases.append(test_case)
-                        generated += 1
-                    index += 1
-        else:
-            # Round-robin fallback when no distribution specified
-            task_idx = 0
-            while len(test_cases) < self.config.test_count:
-                task_type = task_types[task_idx % len(task_types)]
-                task = self.tasks[task_type]
-
+            while generated < self.config.test_count:
                 ctx = TaskContext(
                     rng=self.rng,
                     index=index,
@@ -547,66 +554,80 @@ class DatasetBuilder:
                     config=task.config,
                     dataset_name=self.config.name_prefix,
                 )
-
                 tests = task.generate_tests(ctx)
                 for test_case in tests:
-                    if len(test_cases) >= self.config.test_count:
+                    if generated >= self.config.test_count:
                         break
                     record = self._test_to_record(test_case, test_dir)
                     test_cases.append(record)
                     raw_test_cases.append(test_case)
-
+                    generated += 1
                 index += 1
-                task_idx += 1
 
-        # Generate annotations - stratified by task type
+        # ALWAYS generate 1 annotation per task type for tests (regardless of config)
+        # For grounding tasks, generate 1 annotation per unique element_label
         annotated_count = 0
-        if self.config.annotation_enabled:
-            # Default annotations per type (2 for most, can be overridden)
-            default_annotations = 2
+        annotated_dir.mkdir(exist_ok=True)
 
-            # Group indices by task type
-            indices_by_type: dict[str, list[int]] = {}
-            for idx, test_case in enumerate(raw_test_cases):
-                task_type = test_case.metadata.get("task_type", "unknown")
-                if task_type not in indices_by_type:
-                    indices_by_type[task_type] = []
-                indices_by_type[task_type].append(idx)
+        # Group indices by task type (and element_label for grounding)
+        indices_by_key: dict[str, list[int]] = {}
+        for idx, test_case in enumerate(raw_test_cases):
+            task_type = test_case.metadata.get("task_type", "unknown")
+            # For grounding tasks, use element_label as additional key
+            if task_type == "grounding":
+                element_label = test_case.metadata.get("element_label", "unknown")
+                key = f"grounding:{element_label}"
+            else:
+                key = task_type
+            if key not in indices_by_key:
+                indices_by_key[key] = []
+            indices_by_key[key].append(idx)
 
-            # Select indices to annotate (configurable per task type)
-            indices_to_annotate: set[int] = set()
-            for task_type, indices in indices_by_type.items():
-                # Get count for this task type from config, default to 2
-                count = self.config.annotation_per_type.get(task_type, default_annotations)
-                # Take first N indices for this task type
-                for idx in indices[:count]:
-                    indices_to_annotate.add(idx)
+        # Select 1 index per key to annotate
+        indices_to_annotate: set[int] = set()
+        for key, indices in indices_by_key.items():
+            if indices:
+                indices_to_annotate.add(indices[0])
 
-            for idx in sorted(indices_to_annotate):
-                if idx >= len(raw_test_cases):
-                    continue
-                test_case = raw_test_cases[idx]
+        for idx in sorted(indices_to_annotate):
+            if idx >= len(raw_test_cases):
+                continue
+            test_case = raw_test_cases[idx]
 
-                # Get pixel coordinates for crosshair
-                pixel_coords = test_case.pixel_coords or (0, 0)
+            # Get pixel coordinates for crosshair
+            pixel_coords = test_case.pixel_coords or (0, 0)
 
-                # Build tool_calls list from expected_action and any additional actions
-                tool_calls = [test_case.expected_action]
+            # Build tool_calls list from expected_action and any additional actions
+            tool_calls = [test_case.expected_action]
 
-                # Check for additional tool calls in metadata (e.g., type action for textfields)
-                if "additional_tool_calls" in test_case.metadata:
-                    tool_calls.extend(test_case.metadata["additional_tool_calls"])
+            # Check for additional tool calls in metadata (e.g., type action for textfields)
+            if "additional_tool_calls" in test_case.metadata:
+                tool_calls.extend(test_case.metadata["additional_tool_calls"])
 
-                # Generate annotated image
-                annotated_path = annotated_dir / f"{test_case.test_id}_annotated.png"
-                annotate_test_image(
-                    image_path=test_case.screenshot,
-                    tool_calls=tool_calls,
-                    pixel_coords=pixel_coords,
-                    prompt=test_case.prompt,
-                    output_path=annotated_path,
-                )
-                annotated_count += 1
+            # Generate annotated image - include task type in filename
+            task_type = test_case.metadata.get("task_type", "unknown")
+            # For grounding, include element_label in filename
+            if task_type == "grounding":
+                element_label = test_case.metadata.get("element_label", "unknown")
+                annotated_path = annotated_dir / f"{task_type}_{element_label}_{test_case.test_id}_annotated.png"
+            else:
+                annotated_path = annotated_dir / f"{task_type}_{test_case.test_id}_annotated.png"
+
+            # Extract bbox_pixels for grounding tasks (format: [x, y, width, height])
+            bbox_pixels = None
+            if "bbox_pixels" in test_case.metadata:
+                bp = test_case.metadata["bbox_pixels"]
+                bbox_pixels = (bp[0], bp[1], bp[2], bp[3])
+
+            annotate_test_image(
+                image_path=test_case.screenshot,
+                tool_calls=tool_calls,
+                pixel_coords=pixel_coords,
+                prompt=test_case.prompt,
+                output_path=annotated_path,
+                bbox_pixels=bbox_pixels,
+            )
+            annotated_count += 1
 
         # Write test.json
         with open(test_dir / "test.json", "w", encoding="utf-8") as f:

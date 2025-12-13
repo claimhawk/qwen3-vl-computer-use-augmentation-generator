@@ -55,6 +55,7 @@ from cudag.core.dataset import DatasetBuilder, DatasetConfig
 from cudag.core.distribution import DistributionSampler
 from cudag.core.scroll_task import ScrollTaskBase, ScrollTaskConfig
 from cudag.core.iconlist_task import IconListTaskBase, make_tool_call
+from cudag.core.grounding_task import GroundingTaskBase, bbox_to_ru, scale_bbox
 from cudag.core.models import (
     # Classes
     Attachment,
@@ -244,6 +245,10 @@ __all__ = [
     # IconList Tasks
     "IconListTaskBase",
     "make_tool_call",
+    # Grounding Tasks
+    "GroundingTaskBase",
+    "bbox_to_ru",
+    "scale_bbox",
     # Model DSL - classes
     "Model",
     "ModelGenerator",

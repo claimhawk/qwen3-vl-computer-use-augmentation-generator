@@ -89,6 +89,10 @@ from cudag.core import (
     # Scroll Tasks
     ScrollTaskBase,
     ScrollTaskConfig,
+    # Grounding Tasks
+    GroundingTaskBase,
+    bbox_to_ru,
+    scale_bbox,
     DateField,
     DropdownRegion,
     TestCase,
@@ -170,6 +174,7 @@ from cudag.prompts import (
     COMPUTER_USE_TOOL,
     CUA_SYSTEM_PROMPT,
     TOOL_ACTIONS,
+    BboxCall,
     ToolCall,
     format_tool_call,
     get_system_prompt,
@@ -225,6 +230,10 @@ __all__ = [
     # Scroll Tasks
     "ScrollTaskBase",
     "ScrollTaskConfig",
+    # Grounding Tasks
+    "GroundingTaskBase",
+    "bbox_to_ru",
+    "scale_bbox",
     # Model DSL - classes
     "Model",
     "ModelGenerator",
@@ -289,6 +298,7 @@ __all__ = [
     # Prompts
     "COMPUTER_USE_TOOL",
     "TOOL_ACTIONS",
+    "BboxCall",
     "ToolCall",
     "format_tool_call",
     "parse_tool_call",
