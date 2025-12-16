@@ -471,6 +471,63 @@ class ScrollableGrid(Grid):
             fill=self.scrollbar_thumb_color,
         )
 
+    def render_horizontal_scrollbar(
+        self,
+        draw: ImageDraw.ImageDraw,
+        total_content_width: int | None = None,
+        scroll_offset_x: int = 0,
+    ) -> None:
+        """Render horizontal scrollbar in the last row.
+
+        Args:
+            draw: PIL ImageDraw context.
+            total_content_width: Total width of all content (None = no thumb).
+            scroll_offset_x: Current horizontal scroll offset.
+        """
+        if not self.geometry.last_row_scroll:
+            return
+
+        geom = self.geometry
+        scroll_row_height = geom.scroll_row_height
+        if scroll_row_height <= 0:
+            return
+
+        # Scrollbar position (in the last row, full width minus scroll column)
+        track_x = geom.x
+        track_y = geom.y + geom.height - scroll_row_height
+        track_width = geom.content_width
+        track_height = scroll_row_height
+
+        # Draw track background
+        draw.rectangle(
+            [(track_x, track_y), (track_x + track_width, track_y + track_height)],
+            fill=self.scrollbar_track_color,
+        )
+
+        # Calculate thumb if we have content width info
+        viewport_width = geom.content_width
+        if total_content_width is None or total_content_width <= viewport_width:
+            # No horizontal scrolling needed - just show track
+            return
+
+        # Thumb width proportional to visible ratio
+        thumb_width = max(20, int(track_width * (viewport_width / total_content_width)))
+
+        # Thumb position based on scroll offset
+        max_offset = total_content_width - viewport_width
+        scroll_ratio = scroll_offset_x / max_offset if max_offset > 0 else 0
+        thumb_travel = track_width - thumb_width
+        thumb_x = track_x + int(scroll_ratio * thumb_travel)
+
+        # Draw thumb (centered in track)
+        thumb_height = max(4, scroll_row_height - 4)
+        thumb_y = track_y + (scroll_row_height - thumb_height) // 2
+
+        draw.rectangle(
+            [(thumb_x, thumb_y), (thumb_x + thumb_width, thumb_y + thumb_height)],
+            fill=self.scrollbar_thumb_color,
+        )
+
     def get_visible_layouts(
         self,
         layouts: Sequence[RowLayout],
@@ -550,9 +607,12 @@ class ScrollableGrid(Grid):
                 if col_idx < len(self._col_widths_px):
                     x += self._col_widths_px[col_idx]
 
-        # Render scrollbar
+        # Render vertical scrollbar
         total_height = self.total_content_height(layouts)
         self.render_scrollbar(draw, total_height, scroll_state)
+
+        # Render horizontal scrollbar (just track, no thumb since we don't track horizontal scroll)
+        self.render_horizontal_scrollbar(draw)
 
     def compute_scroll_state(
         self,
