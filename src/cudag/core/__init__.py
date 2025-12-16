@@ -40,6 +40,17 @@ from cudag.core.scrollable_grid import (
     ScrollableGridGeometry,
     ScrollState as GridScrollState,
 )
+from cudag.core.data_grid import (
+    ColumnDef as DataColumnDef,
+    Grid as DataGrid,
+    GridGeometry as DataGridGeometry,
+    RowLayout as DataRowLayout,
+    ScrollableGrid as DataScrollableGrid,
+    ScrollState as DataScrollState,
+    SelectableRowGrid,
+    SelectionState,
+    wrap_text as grid_wrap_text,
+)
 from cudag.core.icon import (
     APP_ICON_LARGE,
     APP_ICON_SMALL,
@@ -192,12 +203,22 @@ __all__ = [
     "Grid",
     "GridCell",
     "GridGeometry",
-    # Scrollable Grid
+    # Scrollable Grid (legacy)
     "ScrollableGrid",
     "ScrollableGridGeometry",
     "ColumnDef",
     "RowLayout",
     "GridScrollState",
+    # Data Grid (composable)
+    "DataGrid",
+    "DataGridGeometry",
+    "DataColumnDef",
+    "DataRowLayout",
+    "DataScrollableGrid",
+    "DataScrollState",
+    "SelectableRowGrid",
+    "SelectionState",
+    "grid_wrap_text",
     # Icons
     "IconSpec",
     "IconPlacement",
