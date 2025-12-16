@@ -101,6 +101,25 @@ cudag new my-generator       # Create new generator
 cudag validate <dataset>     # Validate dataset against schema
 ```
 
+## PyPI Deployment
+
+The package is published to PyPI as `cudag`. To deploy a new version:
+
+```bash
+./scripts/build-deploy.sh patch   # Bump patch version, build, deploy
+./scripts/build-deploy.sh         # Build and deploy current version
+```
+
+Requirements:
+- PyPI token must be set in `.env` as `UV_PUBLISH_PASSWORD`
+- SYSTEM_PROMPT.txt is synced from system-prompt project (script handles this)
+
+The build script:
+1. Bumps patch version in pyproject.toml (if `patch` arg provided)
+2. Copies SYSTEM_PROMPT.txt (replacing symlink for packaging)
+3. Builds wheel and sdist
+4. Uploads to PyPI via twine
+
 ## Dataset Schema
 
 See `docs/DATASET_SCHEMA.md` for the complete dataset schema definition.

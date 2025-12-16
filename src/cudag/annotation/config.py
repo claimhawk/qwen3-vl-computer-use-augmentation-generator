@@ -5,7 +5,8 @@
 """Runtime annotation configuration for data-driven generators.
 
 This module provides AnnotationConfig, which loads annotation.json at runtime
-and provides structured access to elements, icons, tasks, and tolerances.
+and provides structured access to elements, icons, tasks, tolerances, and
+transcriptions.
 
 Example:
     from cudag.annotation import AnnotationConfig
@@ -20,6 +21,12 @@ Example:
     # Get task templates
     for task in config.tasks:
         prompt = task.render_prompt(icon_label="Open Dental")
+
+    # Access grid transcription data
+    grid = config.get_element_by_label("patient-account")
+    if grid and grid.transcription:
+        for row in grid.transcription.rows:
+            print([cell.text for cell in row.cells])
 """
 
 from __future__ import annotations
@@ -29,6 +36,12 @@ import re
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
+
+from cudag.annotation.transcription import (
+    ParsedTranscription,
+    parse_text_transcription,
+    parse_transcription,
+)
 
 
 @dataclass
@@ -137,6 +150,26 @@ class AnnotatedElement:
     h_align: str = "center"
     v_align: str = "center"
 
+    # Grounding flag
+    grounding: bool = False
+    """If True, this element is included in grounding tasks."""
+
+    grounding_label: str = ""
+    """Human-readable label for grounding tasks (e.g., 'Appts', '◀ Y')."""
+
+    # Transcription data (from OCR annotations)
+    ocr: bool = False
+    """If True, this element has OCR transcription data."""
+
+    transcription_raw: str = ""
+    """Raw transcription string (HTML for grids, plain text for text elements)."""
+
+    transcription: ParsedTranscription | None = None
+    """Parsed table transcription for grid elements (None for non-grid elements)."""
+
+    transcription_text: str = ""
+    """Plain text transcription for text elements (empty for grids)."""
+
     @property
     def center(self) -> tuple[int, int]:
         """Center point of the element bounding box."""
@@ -173,6 +206,47 @@ class AnnotatedElement:
         if self.last_col_scroll:
             count -= 1
         return max(0, count)
+
+    @property
+    def has_transcription(self) -> bool:
+        """Check if this element has transcription data."""
+        return self.ocr and bool(self.transcription_raw)
+
+    @property
+    def is_grid_with_data(self) -> bool:
+        """Check if this is a grid element with parsed table data."""
+        return self.element_type == "grid" and self.transcription is not None
+
+    def get_transcription_column(self, col_index: int) -> list[str]:
+        """Get all values from a specific transcription column.
+
+        Args:
+            col_index: Column index (0-based)
+
+        Returns:
+            List of cell text values for that column
+        """
+        if not self.transcription:
+            return []
+        return self.transcription.column(col_index)
+
+    def get_transcription_sample(
+        self, col_index: int, max_samples: int = 10
+    ) -> list[str]:
+        """Get sample values from a transcription column.
+
+        Useful for seeding random generators with realistic example data.
+
+        Args:
+            col_index: Column index (0-based)
+            max_samples: Maximum number of samples to return
+
+        Returns:
+            List of unique non-empty values from that column
+        """
+        if not self.transcription:
+            return []
+        return self.transcription.sample_values(col_index, max_samples)
 
 
 @dataclass
@@ -291,6 +365,23 @@ class AnnotationConfig:
             )
             icons.append(icon)
 
+        # Parse transcription if present
+        ocr_enabled = el.get("ocr", False)
+        transcription_raw = el.get("transcription", "")
+        element_type = el.get("type", "button")
+
+        # Parse transcription based on element type
+        parsed_transcription: ParsedTranscription | None = None
+        transcription_text = ""
+
+        if transcription_raw:
+            if element_type == "grid":
+                # Grid elements have HTML table transcriptions
+                parsed_transcription = parse_transcription(transcription_raw)
+            else:
+                # Text and other elements have plain text transcriptions
+                transcription_text = parse_text_transcription(transcription_raw)
+
         return AnnotatedElement(
             id=element_id,
             element_type=el.get("type", "button"),
@@ -319,6 +410,12 @@ class AnnotationConfig:
             loading_image=el.get("loadingImage"),
             h_align=el.get("hAlign", "center"),
             v_align=el.get("vAlign", "center"),
+            grounding=el.get("grounding", False),
+            grounding_label=el.get("groundingLabel", ""),
+            ocr=ocr_enabled,
+            transcription_raw=transcription_raw,
+            transcription=parsed_transcription,
+            transcription_text=transcription_text,
         )
 
     @classmethod

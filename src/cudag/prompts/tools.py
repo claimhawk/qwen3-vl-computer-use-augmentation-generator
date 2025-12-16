@@ -132,20 +132,20 @@ class BboxCall:
     Used for "grounding" task types that identify element locations.
     """
 
-    element: str
-    """Description of the element being located."""
-
     bbox_2d: tuple[int, int, int, int]
     """Bounding box coordinates [x1, y1, x2, y2] in RU (0-1000)."""
 
+    label: str | None = None
+    """Optional human-readable label of the element being located."""
+
     def to_dict(self) -> dict[str, Any]:
         """Convert to dictionary for JSON serialization."""
+        args: dict[str, Any] = {"bbox_2d": list(self.bbox_2d)}
+        if self.label:
+            args["label"] = self.label
         return {
             "name": "get_bbox",
-            "arguments": {
-                "element": self.element,
-                "bbox_2d": list(self.bbox_2d),
-            },
+            "arguments": args,
         }
 
     @classmethod
@@ -158,22 +158,24 @@ class BboxCall:
         bbox = args.get("bbox_2d", [0, 0, 0, 0])
 
         return cls(
-            element=args.get("element", ""),
             bbox_2d=tuple(bbox),  # type: ignore[arg-type]
+            label=args.get("label"),
         )
 
     @classmethod
-    def create(cls, element: str, bbox_2d: tuple[int, int, int, int]) -> BboxCall:
+    def create(
+        cls, bbox_2d: tuple[int, int, int, int], label: str | None = None
+    ) -> BboxCall:
         """Create a get_bbox tool call.
 
         Args:
-            element: Description of the element (e.g., "search button")
             bbox_2d: Bounding box [x1, y1, x2, y2] in RU units (0-1000)
+            label: Optional human-readable label of the element (e.g., "Appts")
 
         Returns:
             BboxCall instance
         """
-        return cls(element=element, bbox_2d=bbox_2d)
+        return cls(bbox_2d=bbox_2d, label=label)
 
 
 @dataclass
@@ -295,7 +297,7 @@ def format_tool_call(tool_call: ToolCall | BboxCall | dict[str, Any]) -> str:
 
         or for bounding box:
         <tool_call>
-        {"name": "get_bbox", "arguments": {"element": "...", "bbox_2d": [...]}}
+        {"name": "get_bbox", "arguments": {"label": "...", "bbox_2d": [...]}}
         </tool_call>
     """
     if isinstance(tool_call, (ToolCall, BboxCall)):

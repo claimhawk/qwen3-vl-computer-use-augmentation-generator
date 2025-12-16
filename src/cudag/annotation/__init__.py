@@ -25,6 +25,14 @@ For runtime data-driven generation:
     config = AnnotationConfig.load(Path("assets/annotations"))
     for icon in config.get_labeled_icons("desktop"):
         print(f"{icon.label} at {icon.absolute_center}")
+
+For parsing grid transcriptions:
+    from cudag.annotation import parse_transcription
+
+    grid = config.get_element_by_label("patient-account")
+    if grid and grid.transcription:
+        for row in grid.transcription.rows:
+            print([cell.text for cell in row.cells])
 """
 
 from cudag.annotation.config import (
@@ -40,6 +48,13 @@ from cudag.annotation.loader import (
     ParsedTask,
 )
 from cudag.annotation.scaffold import scaffold_generator
+from cudag.annotation.transcription import (
+    ParsedTranscription,
+    TranscriptionCell,
+    TranscriptionRow,
+    parse_text_transcription,
+    parse_transcription,
+)
 
 __all__ = [
     # Runtime config (for data-driven generators)
@@ -47,6 +62,12 @@ __all__ = [
     "AnnotatedElement",
     "AnnotatedIcon",
     "AnnotatedTask",
+    # Transcription parsing (for grid data extraction)
+    "ParsedTranscription",
+    "TranscriptionCell",
+    "TranscriptionRow",
+    "parse_transcription",
+    "parse_text_transcription",
     # Code generation (for scaffolding new generators)
     "AnnotationLoader",
     "ParsedAnnotation",

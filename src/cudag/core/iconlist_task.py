@@ -59,8 +59,7 @@ def make_tool_call(
     elif action == "wait":
         return ToolCall.wait(wait_time)
     else:
-        # Default to double_click for unknown actions
-        return ToolCall.double_click(coord)
+        raise ValueError(f"Unknown action '{action}' - must be one of: double_click, left_click, right_click, wait")
 
 
 class IconListTaskBase(BaseTask):
@@ -161,10 +160,12 @@ class IconListTaskBase(BaseTask):
 
         samples: list[TaskSample] = []
 
-        # Iterate over ALL tasks in annotation (except wait tasks)
+        # Iterate over ALL tasks in annotation (except wait and grounding tasks)
         for task in config.tasks:
             if task.action == "wait":
                 continue  # Wait tasks handled separately
+            if task.action == "grounding":
+                continue  # Grounding tasks handled by GroundingTask
 
             # Get target element
             element = config.get_element(task.target_element_id)
