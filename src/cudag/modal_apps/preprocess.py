@@ -154,10 +154,10 @@ def preprocess_dataset_impl(dataset_name: str):
     # Reload the mounted volume to see latest committed data
     VOLUME.reload()
 
-    # Paths according to modal-volumes.md structure
+    # Paths - preprocessed folder lives inside dataset folder
     data_root = Path("/data")
     dataset_path = data_root / "datasets" / dataset_name
-    preprocessed_path = data_root / "preprocessed" / dataset_name
+    preprocessed_path = dataset_path / "preprocessed"
 
     print(f"\n{'='*80}")
     print(f"Starting CUDAG Preprocessing: {dataset_name}")
@@ -495,7 +495,7 @@ def preprocess_dataset_impl(dataset_name: str):
     # Commit volume changes
     VOLUME.commit()
 
-    print(f"\nPreprocessed data saved to Modal volume: preprocessed/{dataset_name}")
+    print(f"\nPreprocessed data saved to Modal volume: datasets/{dataset_name}/preprocessed")
 
     print(f"\n{'='*80}")
     print("PREPROCESSING COMPLETE!")
