@@ -6,9 +6,10 @@
 
 ## Tasks
 
-- [ ] Commit system.md agent workflow protocol to cudag project
-- [ ] Commit .claude/agents directory for inter-agent communication
-- [ ] Review and commit preprocess.py changes if intentional
+- [x] Commit system.md agent workflow protocol to cudag project (3c8b5b5)
+- [x] Commit .claude/agents directory for inter-agent communication (bd05833)
+- [x] Review and commit preprocess.py changes if intentional (10185d4)
+- [x] Add .claude/todos for task tracking (98d99e4)
 
 ## Notes
 - system.md defines agent identity, workflow, and context engineering practices
