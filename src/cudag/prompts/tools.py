@@ -123,6 +123,46 @@ COMPUTER_USE_TOOL: dict[str, Any] = {
     },
 }
 
+# Text verification tool definition (JSON schema)
+TEXT_VERIFICATION_TOOL: dict[str, Any] = {
+    "type": "function",
+    "function": {
+        "name_for_human": "text_verification",
+        "name": "text_verification",
+        "description": "Request OCR verification of text in two screen regions",
+        "parameters": {
+            "properties": {
+                "regions": {
+                    "description": "Array of exactly 2 regions to compare",
+                    "type": "array",
+                    "items": {
+                        "type": "object",
+                        "properties": {
+                            "bbox_2d": {
+                                "description": "Bounding box [x1, y1, x2, y2] in RU (0-1000)",
+                                "type": "array",
+                                "items": {"type": "number"},
+                                "minItems": 4,
+                                "maxItems": 4,
+                            },
+                            "label": {
+                                "description": "Human-readable label for the region",
+                                "type": "string",
+                            },
+                        },
+                        "required": ["bbox_2d", "label"],
+                    },
+                    "minItems": 2,
+                    "maxItems": 2,
+                },
+            },
+            "required": ["regions"],
+            "type": "object",
+        },
+        "args_format": "Format the arguments as a JSON object.",
+    },
+}
+
 
 @dataclass
 class BboxCall:
@@ -176,6 +216,92 @@ class BboxCall:
             BboxCall instance
         """
         return cls(bbox_2d=bbox_2d, label=label)
+
+
+@dataclass
+class VerificationRegion:
+    """A region for text verification."""
+
+    bbox_2d: tuple[int, int, int, int]
+    """Bounding box coordinates [x1, y1, x2, y2] in RU (0-1000)."""
+
+    label: str
+    """Human-readable label for the region (e.g., 'codes_1', 'prov_2')."""
+
+    def to_dict(self) -> dict[str, Any]:
+        """Convert to dictionary for JSON serialization."""
+        return {"bbox_2d": list(self.bbox_2d), "label": self.label}
+
+
+@dataclass
+class TextVerificationCall:
+    """Represents a text_verification tool call.
+
+    Used for comparing text content between two screen regions.
+    The agent harness crops both regions, runs OCR, and compares.
+
+    Example output:
+        <tool_call>
+        {"name": "text_verification", "arguments": {"regions": [
+            {"bbox_2d": [280, 265, 305, 430], "label": "codes_1"},
+            {"bbox_2d": [460, 542, 485, 595], "label": "codes_2"}
+        ]}}
+        </tool_call>
+    """
+
+    regions: tuple[VerificationRegion, VerificationRegion]
+    """Exactly two regions to compare."""
+
+    def to_dict(self) -> dict[str, Any]:
+        """Convert to dictionary for JSON serialization."""
+        return {
+            "name": "text_verification",
+            "arguments": {"regions": [r.to_dict() for r in self.regions]},
+        }
+
+    @classmethod
+    def from_dict(cls, data: dict[str, Any]) -> TextVerificationCall:
+        """Create from dictionary."""
+        if data.get("name") != "text_verification":
+            raise ValueError(f"Expected text_verification tool, got: {data.get('name')}")
+
+        args = data.get("arguments", {})
+        regions_data = args.get("regions", [])
+
+        if len(regions_data) != 2:
+            raise ValueError(f"Expected exactly 2 regions, got: {len(regions_data)}")
+
+        regions = tuple(
+            VerificationRegion(
+                bbox_2d=tuple(r["bbox_2d"]),  # type: ignore[arg-type]
+                label=r["label"],
+            )
+            for r in regions_data
+        )
+
+        return cls(regions=regions)  # type: ignore[arg-type]
+
+    @classmethod
+    def create(
+        cls,
+        region1: tuple[tuple[int, int, int, int], str],
+        region2: tuple[tuple[int, int, int, int], str],
+    ) -> TextVerificationCall:
+        """Create a text verification call.
+
+        Args:
+            region1: (bbox_2d, label) for first region
+            region2: (bbox_2d, label) for second region
+
+        Returns:
+            TextVerificationCall instance
+        """
+        return cls(
+            regions=(
+                VerificationRegion(bbox_2d=region1[0], label=region1[1]),
+                VerificationRegion(bbox_2d=region2[0], label=region2[1]),
+            )
+        )
 
 
 @dataclass
@@ -281,13 +407,15 @@ class ToolCall:
         return cls(action="terminate", status=status)
 
 
-def format_tool_call(tool_call: ToolCall | BboxCall | dict[str, Any]) -> str:
+def format_tool_call(
+    tool_call: ToolCall | BboxCall | TextVerificationCall | dict[str, Any],
+) -> str:
     """Format a tool call as XML-wrapped JSON string.
 
     This is the canonical output format for GPT responses in training data.
 
     Args:
-        tool_call: ToolCall, BboxCall instance, or dict with {name, arguments}
+        tool_call: ToolCall, BboxCall, TextVerificationCall, or dict with {name, arguments}
 
     Returns:
         Formatted string like:
@@ -299,8 +427,13 @@ def format_tool_call(tool_call: ToolCall | BboxCall | dict[str, Any]) -> str:
         <tool_call>
         {"name": "get_bbox", "arguments": {"label": "...", "bbox_2d": [...]}}
         </tool_call>
+
+        or for text verification:
+        <tool_call>
+        {"name": "text_verification", "arguments": {"regions": [...]}}
+        </tool_call>
     """
-    if isinstance(tool_call, (ToolCall, BboxCall)):
+    if isinstance(tool_call, (ToolCall, BboxCall, TextVerificationCall)):
         data = tool_call.to_dict()
     else:
         data = tool_call

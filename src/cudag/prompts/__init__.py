@@ -11,9 +11,12 @@ from cudag.prompts.system import (
 )
 from cudag.prompts.tools import (
     COMPUTER_USE_TOOL,
+    TEXT_VERIFICATION_TOOL,
     TOOL_ACTIONS,
     BboxCall,
+    TextVerificationCall,
     ToolCall,
+    VerificationRegion,
     format_tool_call,
     parse_tool_call,
     validate_tool_call,
@@ -21,9 +24,12 @@ from cudag.prompts.tools import (
 
 __all__ = [
     "COMPUTER_USE_TOOL",
+    "TEXT_VERIFICATION_TOOL",
     "TOOL_ACTIONS",
     "BboxCall",
+    "TextVerificationCall",
     "ToolCall",
+    "VerificationRegion",
     "format_tool_call",
     "parse_tool_call",
     "validate_tool_call",

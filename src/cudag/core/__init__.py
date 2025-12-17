@@ -67,6 +67,12 @@ from cudag.core.distribution import DistributionSampler
 from cudag.core.scroll_task import ScrollTaskBase, ScrollTaskConfig
 from cudag.core.iconlist_task import IconListTaskBase, make_tool_call
 from cudag.core.grounding_task import GroundingTaskBase, bbox_to_ru, scale_bbox
+from cudag.core.verification_task import (
+    VerificationPair,
+    VerificationSample,
+    VerificationTaskBase,
+    VerificationTestCase,
+)
 from cudag.core.models import (
     # Classes
     Attachment,
@@ -270,6 +276,11 @@ __all__ = [
     "GroundingTaskBase",
     "bbox_to_ru",
     "scale_bbox",
+    # Verification Tasks
+    "VerificationTaskBase",
+    "VerificationPair",
+    "VerificationSample",
+    "VerificationTestCase",
     # Model DSL - classes
     "Model",
     "ModelGenerator",

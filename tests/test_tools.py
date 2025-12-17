@@ -8,7 +8,10 @@ import pytest
 
 from cudag.prompts.tools import (
     COMPUTER_USE_TOOL,
+    TEXT_VERIFICATION_TOOL,
+    TextVerificationCall,
     ToolCall,
+    VerificationRegion,
     format_tool_call,
     parse_tool_call,
     validate_tool_call,
@@ -260,3 +263,140 @@ class TestComputerUseTool:
         assert "scroll" in action_prop["enum"]
         assert "key" in action_prop["enum"]
         assert "type" in action_prop["enum"]
+
+
+class TestVerificationRegion:
+    """Tests for VerificationRegion dataclass."""
+
+    def test_create(self) -> None:
+        region = VerificationRegion(
+            bbox_2d=(100, 200, 300, 400),
+            label="test_region",
+        )
+        assert region.bbox_2d == (100, 200, 300, 400)
+        assert region.label == "test_region"
+
+    def test_to_dict(self) -> None:
+        region = VerificationRegion(
+            bbox_2d=(100, 200, 300, 400),
+            label="codes_1",
+        )
+        d = region.to_dict()
+        assert d["bbox_2d"] == [100, 200, 300, 400]
+        assert d["label"] == "codes_1"
+
+
+class TestTextVerificationCall:
+    """Tests for TextVerificationCall dataclass."""
+
+    def test_create(self) -> None:
+        tc = TextVerificationCall.create(
+            region1=((100, 100, 200, 200), "codes_1"),
+            region2=((300, 300, 400, 400), "codes_2"),
+        )
+        assert tc.regions[0].bbox_2d == (100, 100, 200, 200)
+        assert tc.regions[0].label == "codes_1"
+        assert tc.regions[1].bbox_2d == (300, 300, 400, 400)
+        assert tc.regions[1].label == "codes_2"
+
+    def test_to_dict(self) -> None:
+        tc = TextVerificationCall.create(
+            region1=((280, 265, 305, 430), "procedure_code"),
+            region2=((460, 542, 485, 595), "line_code"),
+        )
+        d = tc.to_dict()
+        assert d["name"] == "text_verification"
+        assert len(d["arguments"]["regions"]) == 2
+        assert d["arguments"]["regions"][0]["label"] == "procedure_code"
+        assert d["arguments"]["regions"][1]["label"] == "line_code"
+        assert d["arguments"]["regions"][0]["bbox_2d"] == [280, 265, 305, 430]
+
+    def test_from_dict(self) -> None:
+        data = {
+            "name": "text_verification",
+            "arguments": {
+                "regions": [
+                    {"bbox_2d": [100, 100, 200, 200], "label": "region_a"},
+                    {"bbox_2d": [300, 300, 400, 400], "label": "region_b"},
+                ]
+            },
+        }
+        tc = TextVerificationCall.from_dict(data)
+        assert tc.regions[0].bbox_2d == (100, 100, 200, 200)
+        assert tc.regions[0].label == "region_a"
+        assert tc.regions[1].bbox_2d == (300, 300, 400, 400)
+        assert tc.regions[1].label == "region_b"
+
+    def test_from_dict_wrong_tool_raises(self) -> None:
+        data = {"name": "wrong_tool", "arguments": {"regions": []}}
+        with pytest.raises(ValueError, match="Expected text_verification"):
+            TextVerificationCall.from_dict(data)
+
+    def test_from_dict_wrong_region_count_raises(self) -> None:
+        data = {
+            "name": "text_verification",
+            "arguments": {
+                "regions": [
+                    {"bbox_2d": [100, 100, 200, 200], "label": "only_one"},
+                ]
+            },
+        }
+        with pytest.raises(ValueError, match="Expected exactly 2 regions"):
+            TextVerificationCall.from_dict(data)
+
+    def test_roundtrip(self) -> None:
+        original = TextVerificationCall.create(
+            region1=((150, 200, 250, 350), "source"),
+            region2=((500, 600, 700, 800), "target"),
+        )
+        d = original.to_dict()
+        restored = TextVerificationCall.from_dict(d)
+        assert restored.regions[0].bbox_2d == original.regions[0].bbox_2d
+        assert restored.regions[0].label == original.regions[0].label
+        assert restored.regions[1].bbox_2d == original.regions[1].bbox_2d
+        assert restored.regions[1].label == original.regions[1].label
+
+    def test_format_tool_call(self) -> None:
+        tc = TextVerificationCall.create(
+            region1=((100, 100, 200, 200), "codes_1"),
+            region2=((300, 300, 400, 400), "codes_2"),
+        )
+        result = format_tool_call(tc)
+        assert "<tool_call>" in result
+        assert "</tool_call>" in result
+        assert '"name": "text_verification"' in result
+        assert '"label": "codes_1"' in result
+        assert '"label": "codes_2"' in result
+
+
+class TestTextVerificationTool:
+    """Tests for TEXT_VERIFICATION_TOOL definition."""
+
+    def test_tool_has_required_fields(self) -> None:
+        assert TEXT_VERIFICATION_TOOL["type"] == "function"
+        assert "function" in TEXT_VERIFICATION_TOOL
+
+    def test_function_definition(self) -> None:
+        func = TEXT_VERIFICATION_TOOL["function"]
+        assert func["name"] == "text_verification"
+        assert func["name_for_human"] == "text_verification"
+        assert "parameters" in func
+
+    def test_parameters_schema(self) -> None:
+        params = TEXT_VERIFICATION_TOOL["function"]["parameters"]
+        assert params["type"] == "object"
+        assert "regions" in params["properties"]
+        assert params["required"] == ["regions"]
+
+    def test_regions_schema(self) -> None:
+        regions_prop = TEXT_VERIFICATION_TOOL["function"]["parameters"]["properties"]["regions"]
+        assert regions_prop["type"] == "array"
+        assert regions_prop["minItems"] == 2
+        assert regions_prop["maxItems"] == 2
+
+    def test_region_item_schema(self) -> None:
+        items = TEXT_VERIFICATION_TOOL["function"]["parameters"]["properties"]["regions"]["items"]
+        assert items["type"] == "object"
+        assert "bbox_2d" in items["properties"]
+        assert "label" in items["properties"]
+        assert items["required"] == ["bbox_2d", "label"]
