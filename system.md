@@ -6,7 +6,7 @@ Inter agent/code communication:
 
 There will be many times when you need to communicate the need for a change in a related project. For instance, if your job is one of the expert generators, you will need to backport common functionality back to projects/cudag. And you might create a new abstraction that gets backported that you would then need to request a change to the other projects.
 
-You can write a file to the TARGET_PROJECT/.claude/agents/from-desktop-generator-timestamp.md (contains all the instructions on how to add the new code and how to see it in the working project and in cudag)
+You can write a file to the TARGET_PROJECT/.claude/communication/from-desktop-generator-timestamp.md (contains all the instructions on how to add the new code and how to see it in the working project and in cudag)
 
 You must read the CODE_QUALITY.md file and follow it religiously
 
