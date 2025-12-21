@@ -298,14 +298,23 @@ class AnnotationConfig:
     annotations_dir: Path | None = None
 
     @classmethod
-    def load(cls, annotations_dir: Path | str) -> "AnnotationConfig":
+    def load(cls, annotations_dir: Path | str) -> AnnotationConfig:
         """Load annotation config from a directory.
+
+        Supports two formats:
+        1. Legacy format: annotation.json contains screen data directly
+        2. Manifest format (v2.0): annotation.json is a manifest pointing to
+           screen subfolders, each with its own annotation.json
 
         Args:
             annotations_dir: Path to annotations directory containing annotation.json
 
         Returns:
-            Loaded AnnotationConfig instance
+            Loaded AnnotationConfig instance for the first/only screen
+
+        Raises:
+            FileNotFoundError: If annotation.json or screen subfolder not found
+            ValueError: If manifest contains no screens
         """
         annotations_dir = Path(annotations_dir)
         json_path = annotations_dir / "annotation.json"
@@ -316,12 +325,37 @@ class AnnotationConfig:
         with open(json_path) as f:
             data = json.load(f)
 
+        # Check for manifest format (v2.0)
+        if data.get("type") == "manifest":
+            # Manifest format - load first screen from subfolder
+            screens = data.get("screens", [])
+
+            if not screens:
+                raise ValueError("Manifest contains no screens")
+
+            # Load first screen's annotation
+            first_screen = screens[0]
+            screen_name = first_screen["name"]
+            screen_dir = annotations_dir / screen_name
+            screen_path = screen_dir / "annotation.json"
+
+            if not screen_path.exists():
+                raise FileNotFoundError(f"Screen annotation not found: {screen_path}")
+
+            with open(screen_path) as f:
+                screen_data = json.load(f)
+
+            config = cls._parse_dict(screen_data)
+            config.annotations_dir = screen_dir
+            return config
+
+        # Legacy format - parse directly
         config = cls._parse_dict(data)
         config.annotations_dir = annotations_dir
         return config
 
     @classmethod
-    def _parse_dict(cls, data: dict[str, Any]) -> "AnnotationConfig":
+    def _parse_dict(cls, data: dict[str, Any]) -> AnnotationConfig:
         """Parse annotation from dictionary."""
         elements = [cls._parse_element(el) for el in data.get("elements", [])]
         tasks = [cls._parse_task(t) for t in data.get("tasks", [])]
@@ -329,7 +363,7 @@ class AnnotationConfig:
         image_size = data.get("imageSize", [1920, 1080])
 
         return cls(
-            screen_name=data.get("screenName", "untitled"),
+            screen_name=data.get("name") or data.get("screenName", "untitled"),
             image_size=(image_size[0], image_size[1]),
             elements=elements,
             tasks=tasks,
